@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AdaptivAI Mini — Catalog</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="text-slate-900 antialiased">
+
+  <div class="flex min-h-screen">
+
+    <!-- Sidebar -->
+    <aside class="sidebar hidden w-64 shrink-0 md:flex md:flex-col">
+      <div class="flex h-16 items-center gap-2 px-6">
+        <span class="brand-mark">A</span>
+        <div class="flex flex-col leading-tight">
+          <span class="text-sm font-semibold">AdaptivAI</span>
+          <span class="text-[10px] uppercase tracking-widest text-slate-400">mini</span>
+        </div>
+      </div>
+      <nav class="flex flex-col gap-1 px-3 py-4 text-sm">
+        <a class="nav-item nav-item-active" href="/">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3m-6 0v-6a1 1 0 011-1h2a1 1 0 011 1v6m-4 0h4"/></svg>
+          Home
+        </a>
+        <a class="nav-item" href="#">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/></svg>
+          Catalog
+        </a>
+        <a class="nav-item nav-item-muted" href="#">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          My courses
+        </a>
+        <a class="nav-item nav-item-muted" href="#">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+          Bookmarks
+        </a>
+      </nav>
+
+      <div class="mt-auto p-4">
+        <div class="rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-4 text-white">
+          <div class="text-xs font-semibold uppercase tracking-wider opacity-80">Agent mode</div>
+          <div class="mt-1 text-sm font-medium">Every course below was built by an LLM agent — not a content team.</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1">
+
+      <!-- Top bar -->
+      <header class="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-slate-200/80 bg-white/80 px-6 backdrop-blur">
+        <form id="topbar-form" class="max-w-xl flex-1">
+          <div class="search-pill">
+            <svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3m0 0A7.5 7.5 0 103.5 10.5a7.5 7.5 0 0013.2 6.2z"/></svg>
+            <input name="topic" placeholder="What do you want to learn today?" class="search-input" />
+            <kbd class="search-kbd">↵</kbd>
+          </div>
+        </form>
+        <div class="hidden items-center gap-2 text-xs text-slate-500 md:flex">
+          <span class="pulse-dot"></span>
+          Agent online
+        </div>
+      </header>
+
+      <!-- Hero -->
+      <section class="hero">
+        <div class="hero-glow"></div>
+        <div class="relative mx-auto max-w-3xl px-6 py-20 text-center">
+          <div class="inline-flex items-center gap-2 rounded-full border border-indigo-200/60 bg-white/70 px-3 py-1 text-[11px] font-medium uppercase tracking-wider text-indigo-600 shadow-sm backdrop-blur">
+            <span class="pulse-dot pulse-dot-indigo"></span>
+            Agentic · LangChain · LangGraph · LangSmith
+          </div>
+          <h1 class="mt-5 text-5xl font-bold tracking-tight text-slate-900">
+            Explore training <span class="bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 bg-clip-text text-transparent">your way</span>
+          </h1>
+          <p class="mx-auto mt-4 max-w-xl text-slate-600">
+            Type any tech topic. Our agent finds the best YouTube videos, reads their transcripts, and assembles a full mini-course in under a minute.
+          </p>
+          <form id="hero-form" class="mx-auto mt-8 flex max-w-xl flex-col gap-2 sm:flex-row">
+            <input name="topic" placeholder='Try "Docker basics" or "React Hooks"' class="hero-input" />
+            <button class="hero-cta">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              Generate
+            </button>
+          </form>
+          <div class="mt-6 flex flex-wrap items-center justify-center gap-2">
+            <span class="text-xs text-slate-400">or try:</span>
+            <button class="chip" data-chip="Docker basics">🐳 Docker basics</button>
+            <button class="chip" data-chip="React Hooks">⚛️ React Hooks</button>
+            <button class="chip" data-chip="Python decorators">🐍 Python decorators</button>
+            <button class="chip" data-chip="Kubernetes pods">☸️ Kubernetes</button>
+            <button class="chip" data-chip="Git rebase">🌿 Git rebase</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Catalog grid -->
+      <section class="bg-white px-6 pb-20 pt-10">
+        <div class="mx-auto max-w-6xl">
+          <div class="mb-6 flex items-end justify-between">
+            <div>
+              <h2 class="text-2xl font-semibold tracking-tight">Your courses</h2>
+              <p class="text-sm text-slate-500">Every card was agent-generated from real video content.</p>
+            </div>
+            <div id="catalog-count" class="hidden rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600"></div>
+          </div>
+
+          <div id="catalog-grid" class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"></div>
+
+          <div id="catalog-empty" class="hidden rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 p-12 text-center">
+            <div class="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            </div>
+            <p class="text-sm font-medium text-slate-700">No courses yet</p>
+            <p class="text-xs text-slate-500">Type a topic above or click a suggestion to generate your first course.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Generation modal -->
+  <div id="gen-overlay" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/70 p-4 backdrop-blur-md">
+    <div class="modal w-full max-w-md">
+      <div class="modal-glow"></div>
+      <div class="flex items-center gap-3">
+        <div class="relative h-10 w-10">
+          <span class="absolute inset-0 animate-ping rounded-full bg-indigo-500/40"></span>
+          <span class="relative grid h-full w-full place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
+            <svg class="h-4 w-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          </span>
+        </div>
+        <div>
+          <p class="font-semibold">Building your course</p>
+          <p id="gen-topic" class="text-xs text-slate-500"></p>
+        </div>
+      </div>
+      <ul id="gen-steps" class="mt-6 space-y-2.5 text-sm"></ul>
+      <p id="gen-error" class="mt-4 hidden rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700"></p>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script>renderCatalogPage();</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+chroma_data/
+.venv/
+venv/
+.DS_Store
+.idea/
+.vscode/

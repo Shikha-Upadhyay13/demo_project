@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AdaptivAI Mini — Course</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="text-slate-900 antialiased">
+
+  <header class="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-slate-200/80 bg-white/80 px-6 backdrop-blur">
+    <a href="/" class="flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900">
+      <span class="brand-mark">A</span>
+      AdaptivAI <span class="text-[10px] font-medium uppercase tracking-widest text-slate-400">mini</span>
+    </a>
+    <span class="text-slate-300">/</span>
+    <span id="course-topic" class="text-sm text-slate-600">Loading...</span>
+    <div class="ml-auto flex items-center gap-2 text-xs text-slate-500">
+      <span class="pulse-dot"></span>
+      Agent online
+    </div>
+  </header>
+
+  <main class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-6 py-8 lg:grid-cols-[65%_35%]">
+
+    <!-- Main column -->
+    <section>
+      <div class="course-header">
+        <div class="course-header-glow"></div>
+        <div id="topic-chip" class="course-chip">
+          <span class="pulse-dot pulse-dot-indigo"></span>
+          <span>Course</span>
+        </div>
+        <h1 id="course-title" class="mt-3 text-3xl font-bold tracking-tight"></h1>
+        <div class="mt-2 flex items-center gap-3 text-xs text-slate-500">
+          <span id="course-video-count"></span>
+          <span class="opacity-40">·</span>
+          <span id="course-created"></span>
+          <span class="opacity-40">·</span>
+          <span class="inline-flex items-center gap-1">
+            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            Agent-generated
+          </span>
+        </div>
+      </div>
+
+      <div id="videos" class="mt-6 flex flex-col gap-4"></div>
+    </section>
+
+    <!-- Side panel -->
+    <aside class="lg:sticky lg:top-20 lg:self-start">
+      <div class="panel">
+        <div class="tabs">
+          <button data-tab="summary" class="tab-btn tab-active">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h7"/></svg>
+            Summary
+          </button>
+          <button data-tab="chat" class="tab-btn">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Chat
+          </button>
+          <button data-tab="quiz" class="tab-btn">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h.01M15 12h.01M9 16h6M12 4a8 8 0 100 16 8 8 0 000-16z"/></svg>
+            Quiz
+          </button>
+        </div>
+
+        <!-- Summary -->
+        <div data-tab-panel="summary" class="p-6">
+          <div id="summary-empty" class="empty-lazy">
+            <div class="empty-lazy-icon">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h7"/></svg>
+            </div>
+            <p class="mt-3 text-sm font-medium">No summary yet</p>
+            <p class="text-xs text-slate-500">Your agent will write one from the video transcripts.</p>
+            <button id="gen-summary-btn" class="lazy-cta mt-4">Generate summary</button>
+          </div>
+          <div id="summary-loading" class="hidden py-12 text-center">
+            <div class="lazy-spinner"></div>
+            <p class="mt-4 text-sm font-medium">Writing your summary...</p>
+            <p class="text-xs text-slate-500">Reading transcripts and extracting key concepts.</p>
+          </div>
+          <div id="summary-content" class="prose hidden"></div>
+        </div>
+
+        <!-- Chat -->
+        <div data-tab-panel="chat" class="chat-wrap hidden">
+          <div id="chat-messages" class="chat-messages">
+            <div class="chat-empty">
+              <div class="empty-lazy-icon">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </div>
+              <p class="mt-3 text-sm font-medium">Ask the agent</p>
+              <p class="text-xs text-slate-500">Questions get routed to RAG, follow-up, or clarify — watch the chip above each reply.</p>
+            </div>
+          </div>
+          <form id="chat-form" class="chat-input-wrap">
+            <input id="chat-input" placeholder="Ask a question..." class="chat-input" />
+            <button class="chat-send" type="submit">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9-7-9-7-9 7 9 7zM12 19v-7"/></svg>
+            </button>
+          </form>
+        </div>
+
+        <!-- Quiz -->
+        <div data-tab-panel="quiz" class="hidden p-6">
+          <div id="quiz-empty" class="empty-lazy">
+            <div class="empty-lazy-icon">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h.01M15 12h.01M9 16h6M12 4a8 8 0 100 16 8 8 0 000-16z"/></svg>
+            </div>
+            <p class="mt-3 text-sm font-medium">No quiz yet</p>
+            <p class="text-xs text-slate-500">5 multiple-choice questions, built from the transcripts.</p>
+            <button id="gen-quiz-btn" class="lazy-cta mt-4">Generate quiz</button>
+          </div>
+          <div id="quiz-loading" class="hidden py-12 text-center">
+            <div class="lazy-spinner"></div>
+            <p class="mt-4 text-sm font-medium">Building your quiz...</p>
+            <p class="text-xs text-slate-500">5 questions with explanations, mixed difficulty.</p>
+          </div>
+          <div id="quiz-body" class="hidden">
+            <form id="quiz-form" class="space-y-5"></form>
+            <button id="quiz-submit" class="quiz-submit mt-5">Submit quiz</button>
+            <div id="quiz-result" class="mt-4 hidden"></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script>renderCoursePage();</script>
+</body>
+</html>
