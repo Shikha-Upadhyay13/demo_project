@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AdaptivAI Mini — Bookmarks</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="text-slate-900 antialiased">
+  <div class="flex min-h-screen">
+    <div id="sidebar-slot"></div>
+    <main class="flex-1">
+      <div id="topbar-slot"></div>
+
+      <section class="px-6 py-10">
+        <div class="mx-auto max-w-6xl">
+          <div class="section-header">
+            <div>
+              <div class="section-eyebrow">Saved for later</div>
+              <h1 class="section-title">Bookmarks</h1>
+              <p class="section-subtitle">Courses you've starred. Click the bookmark icon on any card to add one.</p>
+            </div>
+            <div class="section-stat" id="section-count"></div>
+          </div>
+
+          <div class="toolbar">
+            <div class="search-pill flex-1 max-w-md">
+              <svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3m0 0A7.5 7.5 0 103.5 10.5a7.5 7.5 0 0013.2 6.2z"/></svg>
+              <input id="filter-input" placeholder="Filter bookmarks..." class="search-input" />
+            </div>
+            <select id="sort-select" class="toolbar-select">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="az">A–Z</option>
+              <option value="za">Z–A</option>
+            </select>
+          </div>
+
+          <div id="catalog-grid" class="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"></div>
+
+          <div id="catalog-empty" class="hidden empty-card">
+            <div class="empty-icon">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+            </div>
+            <p class="empty-title">No bookmarks yet</p>
+            <p class="empty-body">Click the bookmark icon on any course to save it here.</p>
+            <a href="/catalog" class="lazy-cta mt-4">Browse catalog</a>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script>renderSectionPage({ section: "bookmarks" });</script>
+</body>
+</html>

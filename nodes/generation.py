@@ -66,9 +66,18 @@ def _llm(model: str | None = None, temperature: float = 0.2) -> ChatGroq:
     )
 
 
+# Groq free tier caps llama-3.3-70b-versatile at 12k TPM. We budget ~6k chars per
+# video so 3 videos + prompt + response stay well under the window. ~4 chars/token.
+MAX_CHARS_PER_TRANSCRIPT = int(os.environ.get("MAX_CHARS_PER_TRANSCRIPT", "6000"))
+
+
 def _joined_material(transcripts: list[str]) -> str:
-    # Label each transcript so the model can implicitly attribute material.
-    blocks = [f"[Video {i+1}]\n{t}" for i, t in enumerate(transcripts)]
+    # Label each transcript so the model can implicitly attribute material,
+    # and truncate each to stay under the provider's TPM limit.
+    blocks: list[str] = []
+    for i, t in enumerate(transcripts):
+        body = t if len(t) <= MAX_CHARS_PER_TRANSCRIPT else t[:MAX_CHARS_PER_TRANSCRIPT] + "\n...[truncated]"
+        blocks.append(f"[Video {i+1}]\n{body}")
     return "\n\n".join(blocks)
 
 

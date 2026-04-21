@@ -1,9 +1,52 @@
 // AdaptivAI Mini — vanilla JS.
-// Two entry points:
-//   renderCatalogPage() — index.html
-//   renderCoursePage()  — course.html
+// Entry points (one per HTML page):
+//   renderLoginPage()    — login.html
+//   renderHomePage()     — index.html (hero + recent courses)
+//   renderSectionPage()  — catalog.html, my-courses.html, bookmarks.html
+//   renderCoursePage()   — course.html
 
-// ---------- shared ----------
+// ========================================================================
+// User / bookmark / owned-courses state in localStorage
+// ========================================================================
+
+const USER_KEY = "adaptivai:user";
+const OWNED_KEY = "adaptivai:owned";
+const BOOKMARKS_KEY = "adaptivai:bookmarks";
+const AVATAR_EMOJIS = ["🦊","🐼","🦄","🐙","🐸","🦁","🐯","🐵","🐨","🦉","🐺","🐢","🐲","🦖","🐳","🦜"];
+
+function getUser() {
+  try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); }
+  catch { return null; }
+}
+function setUser(u) { localStorage.setItem(USER_KEY, JSON.stringify(u)); }
+function logout() { localStorage.removeItem(USER_KEY); window.location.href = "/login"; }
+
+function getOwned() {
+  try { return JSON.parse(localStorage.getItem(OWNED_KEY) || "[]"); }
+  catch { return []; }
+}
+function addOwned(courseId) {
+  const set = new Set(getOwned());
+  set.add(courseId);
+  localStorage.setItem(OWNED_KEY, JSON.stringify([...set]));
+}
+
+function getBookmarks() {
+  try { return JSON.parse(localStorage.getItem(BOOKMARKS_KEY) || "[]"); }
+  catch { return []; }
+}
+function toggleBookmark(courseId) {
+  const set = new Set(getBookmarks());
+  if (set.has(courseId)) set.delete(courseId);
+  else set.add(courseId);
+  localStorage.setItem(BOOKMARKS_KEY, JSON.stringify([...set]));
+  return set.has(courseId);
+}
+function isBookmarked(courseId) { return getBookmarks().includes(courseId); }
+
+// ========================================================================
+// SHARED SSE + HTML utils
+// ========================================================================
 
 async function streamSSE(url, body, onEvent) {
   const res = await fetch(url, {
@@ -44,10 +87,10 @@ function escapeHtml(s) {
   }[c]));
 }
 
-// ---------- topic theming ----------
-//
-// Stable per-topic gradient + emoji picker. Makes the catalog feel alive
-// without shipping a design system.
+// ========================================================================
+// Topic theming (unchanged visual identity)
+// ========================================================================
+
 const TOPIC_ICONS = [
   { kw: ["docker", "container"], emoji: "🐳" },
   { kw: ["react", "jsx", "hook"], emoji: "⚛️" },
@@ -56,7 +99,7 @@ const TOPIC_ICONS = [
   { kw: ["git", "rebase", "merge"], emoji: "🌿" },
   { kw: ["graphql", "apollo"], emoji: "🔗" },
   { kw: ["rust", "cargo"], emoji: "🦀" },
-  { kw: ["go", "golang"], emoji: "🐹" },
+  { kw: ["go ", "golang"], emoji: "🐹" },
   { kw: ["node", "express", "npm"], emoji: "🟢" },
   { kw: ["typescript"], emoji: "🔷" },
   { kw: ["javascript", " js"], emoji: "💛" },
@@ -84,66 +127,8 @@ function themeFor(topic) {
   const emoji = entry ? entry.emoji : "✨";
   let h = 0;
   for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
-  const gradient = GRADIENTS[h % GRADIENTS.length];
-  return { emoji, gradient };
+  return { emoji, gradient: GRADIENTS[h % GRADIENTS.length] };
 }
-
-// ========================================================================
-// CATALOG PAGE
-// ========================================================================
-
-async function renderCatalogPage() {
-  const grid = document.getElementById("catalog-grid");
-  const empty = document.getElementById("catalog-empty");
-  const count = document.getElementById("catalog-count");
-  try {
-    const res = await fetch("/api/catalog");
-    const courses = await res.json();
-    if (!courses.length) {
-      empty.classList.remove("hidden");
-    } else {
-      empty.classList.add("hidden");
-      grid.innerHTML = courses.map(courseCardHtml).join("");
-      count.textContent = `${courses.length} course${courses.length === 1 ? "" : "s"}`;
-      count.classList.remove("hidden");
-    }
-  } catch {
-    empty.textContent = "Failed to load catalog.";
-    empty.classList.remove("hidden");
-  }
-
-  document.getElementById("topbar-form").addEventListener("submit", onSubmitTopic);
-  document.getElementById("hero-form").addEventListener("submit", onSubmitTopic);
-  document.querySelectorAll("[data-chip]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const topic = btn.dataset.chip;
-      const input = document.querySelector('#hero-form input[name="topic"]');
-      input.value = topic;
-      document.getElementById("hero-form").dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
-    });
-  });
-}
-
-function courseCardHtml(c) {
-  const when = c.created_at ? timeAgo(c.created_at) : "";
-  const { emoji, gradient } = themeFor(c.topic);
-  return `
-    <a href="/course/${encodeURIComponent(c.course_id)}" class="course-card">
-      <div class="course-card-header" style="background: ${gradient}">
-        <span class="course-card-emoji">${emoji}</span>
-      </div>
-      <div class="course-card-body">
-        <div class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Course</div>
-        <div class="mt-1 course-card-topic">${escapeHtml(c.topic)}</div>
-        <div class="course-card-meta">
-          <span>${c.video_count} video${c.video_count === 1 ? "" : "s"} · ${escapeHtml(when)}</span>
-          <span class="course-card-cta">View →</span>
-        </div>
-      </div>
-    </a>
-  `;
-}
-
 function timeAgo(iso) {
   const t = new Date(iso).getTime();
   const diff = (Date.now() - t) / 1000;
@@ -154,10 +139,279 @@ function timeAgo(iso) {
   return new Date(iso).toLocaleDateString();
 }
 
-async function onSubmitTopic(e) {
-  e.preventDefault();
-  const input = e.target.querySelector('input[name="topic"]');
-  const topic = (input.value || "").trim();
+// ========================================================================
+// SHELL (sidebar + topbar) — used by home / section / course pages
+// ========================================================================
+
+const NAV = [
+  { slug: "home",       label: "Home",         href: "/",           icon: "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3m-6 0v-6a1 1 0 011-1h2a1 1 0 011 1v6m-4 0h4" },
+  { slug: "catalog",    label: "Catalog",      href: "/catalog",    icon: "M4 6h16M4 12h16M4 18h7" },
+  { slug: "my-courses", label: "My courses",   href: "/my-courses", icon: "M5 13l4 4L19 7" },
+  { slug: "bookmarks",  label: "Bookmarks",    href: "/bookmarks",  icon: "M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" },
+];
+
+function renderSidebar(activeSlug) {
+  const slot = document.getElementById("sidebar-slot");
+  if (!slot) return;
+  slot.outerHTML = `
+    <aside class="sidebar hidden w-64 shrink-0 md:flex md:flex-col">
+      <div class="sidebar-header">
+        <a href="/" class="sidebar-brand-row">
+          <span class="brand-mark">A</span>
+          <div class="leading-tight">
+            <div class="text-sm font-semibold">AdaptivAI</div>
+            <div class="text-[10px] uppercase tracking-widest text-slate-400">mini</div>
+          </div>
+        </a>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section-label">Learn</div>
+        ${NAV.map((n) => `
+          <a class="nav-item ${n.slug === activeSlug ? "nav-item-active" : ""}" href="${n.href}">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${n.icon}"/></svg>
+            ${n.label}
+          </a>
+        `).join("")}
+      </nav>
+      <div class="sidebar-footer">
+        <div class="rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-4 text-white">
+          <div class="text-xs font-semibold uppercase tracking-wider opacity-80">Agent mode</div>
+          <div class="mt-1 text-sm font-medium">Every course here was built by an LLM agent — not a content team.</div>
+        </div>
+      </div>
+    </aside>
+  `;
+}
+
+function renderTopbar(opts = {}) {
+  const slot = document.getElementById("topbar-slot");
+  if (!slot) return;
+  const user = getUser();
+  const showSearch = opts.search !== false;
+
+  slot.outerHTML = `
+    <header class="topbar">
+      ${showSearch ? `
+        <form id="topbar-form" class="max-w-xl flex-1">
+          <div class="search-pill">
+            <svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3m0 0A7.5 7.5 0 103.5 10.5a7.5 7.5 0 0013.2 6.2z"/></svg>
+            <input name="topic" placeholder="Generate a new course..." class="search-input" />
+            <kbd class="search-kbd">↵</kbd>
+          </div>
+        </form>
+      ` : `<div class="flex-1"></div>`}
+
+      <div class="hidden items-center gap-2 text-xs text-slate-500 md:flex">
+        <span class="pulse-dot"></span>
+        Agent online
+      </div>
+
+      ${user ? `
+        <button id="user-chip" class="user-chip">
+          <span class="user-avatar">${user.avatar || "👤"}</span>
+          <span class="hidden sm:inline">${escapeHtml(user.name || "You")}</span>
+          <svg class="h-3 w-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+      ` : `
+        <a href="/login" class="user-chip">
+          <span class="user-avatar">👤</span>
+          <span class="hidden sm:inline">Sign in</span>
+        </a>
+      `}
+    </header>
+  `;
+
+  // Wire topbar search (submits to home page generation if not there).
+  const form = document.getElementById("topbar-form");
+  if (form) {
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const topic = (form.querySelector('input[name="topic"]').value || "").trim();
+      if (!topic) return;
+      if (location.pathname === "/") {
+        // Let home page handler take over.
+        startGeneration(topic);
+      } else {
+        location.href = "/?topic=" + encodeURIComponent(topic);
+      }
+    });
+  }
+
+  // User menu.
+  const chip = document.getElementById("user-chip");
+  if (chip && user) chip.addEventListener("click", (e) => { e.stopPropagation(); openUserMenu(chip); });
+}
+
+function openUserMenu(anchor) {
+  closeUserMenu();
+  const user = getUser();
+  const menu = document.createElement("div");
+  menu.className = "user-menu";
+  menu.id = "user-menu";
+  menu.innerHTML = `
+    <div class="user-menu-header">
+      <div class="flex items-center gap-3">
+        <span class="user-avatar" style="width:36px;height:36px;font-size:18px;">${user.avatar || "👤"}</span>
+        <div>
+          <div class="text-sm font-semibold text-slate-900">${escapeHtml(user.name || "You")}</div>
+          <div class="text-[11px] text-slate-500">${escapeHtml(user.email || "")}</div>
+        </div>
+      </div>
+    </div>
+    <a href="/my-courses" class="user-menu-item">
+      <svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+      My courses
+    </a>
+    <a href="/bookmarks" class="user-menu-item">
+      <svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+      Bookmarks
+    </a>
+    <button id="logout-btn" class="user-menu-item user-menu-item-danger">
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+      Sign out
+    </button>
+  `;
+  document.body.appendChild(menu);
+  menu.querySelector("#logout-btn").addEventListener("click", logout);
+  // Close on outside click.
+  setTimeout(() => document.addEventListener("click", closeUserMenu, { once: true }), 0);
+}
+function closeUserMenu() {
+  const m = document.getElementById("user-menu");
+  if (m) m.remove();
+}
+
+// ========================================================================
+// LOGIN PAGE
+// ========================================================================
+
+function renderLoginPage() {
+  // If already logged in, forward to home.
+  if (getUser()) { window.location.href = "/"; return; }
+
+  const picker = document.getElementById("avatar-picker");
+  let selected = AVATAR_EMOJIS[0];
+  picker.innerHTML = AVATAR_EMOJIS
+    .map((e) => `<button type="button" class="avatar-option ${e === selected ? "selected" : ""}" data-emoji="${e}">${e}</button>`)
+    .join("");
+  picker.addEventListener("click", (e) => {
+    const btn = e.target.closest(".avatar-option");
+    if (!btn) return;
+    selected = btn.dataset.emoji;
+    picker.querySelectorAll(".avatar-option").forEach((b) => b.classList.toggle("selected", b === btn));
+  });
+
+  document.getElementById("login-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = (document.getElementById("login-name").value || "").trim();
+    const email = (document.getElementById("login-email").value || "").trim();
+    if (!name || !email) return;
+    setUser({ name, email, avatar: selected, signedInAt: new Date().toISOString() });
+    window.location.href = "/";
+  });
+
+  document.getElementById("guest-btn").addEventListener("click", () => {
+    setUser({ name: "Guest", email: "", avatar: "👤", guest: true, signedInAt: new Date().toISOString() });
+    window.location.href = "/";
+  });
+}
+
+// ========================================================================
+// CARD RENDERING
+// ========================================================================
+
+function courseCardHtml(c, opts = {}) {
+  const when = c.created_at ? timeAgo(c.created_at) : "";
+  const { emoji, gradient } = themeFor(c.topic);
+  const bookmarked = isBookmarked(c.course_id);
+  const showBookmark = opts.bookmark !== false;
+  return `
+    <div class="relative">
+      ${showBookmark ? `
+        <button class="bookmark-btn ${bookmarked ? "bookmarked" : ""}" data-bookmark="${c.course_id}" title="${bookmarked ? "Remove bookmark" : "Bookmark"}">
+          <svg class="h-4 w-4" fill="${bookmarked ? "currentColor" : "none"}" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+          </svg>
+        </button>
+      ` : ""}
+      <a href="/course/${encodeURIComponent(c.course_id)}" class="course-card">
+        <div class="course-card-header" style="background: ${gradient}">
+          <span class="course-card-emoji">${emoji}</span>
+        </div>
+        <div class="course-card-body">
+          <div class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Course</div>
+          <div class="mt-1 course-card-topic">${escapeHtml(c.topic)}</div>
+          <div class="course-card-meta">
+            <span>${c.video_count} video${c.video_count === 1 ? "" : "s"} · ${escapeHtml(when)}</span>
+            <span class="course-card-cta">View →</span>
+          </div>
+        </div>
+      </a>
+    </div>
+  `;
+}
+
+function wireBookmarkButtons(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+  root.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-bookmark]");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const id = btn.dataset.bookmark;
+    const nowOn = toggleBookmark(id);
+    btn.classList.toggle("bookmarked", nowOn);
+    btn.querySelector("svg").setAttribute("fill", nowOn ? "currentColor" : "none");
+  });
+}
+
+// ========================================================================
+// HOME PAGE
+// ========================================================================
+
+async function renderHomePage() {
+  renderSidebar("home");
+  renderTopbar({ search: true });
+
+  // If URL has ?topic=..., kick off generation immediately (used by topbar search from other pages).
+  const params = new URLSearchParams(location.search);
+  const queued = params.get("topic");
+
+  const grid = document.getElementById("catalog-grid");
+  const empty = document.getElementById("catalog-empty");
+  try {
+    const res = await fetch("/api/catalog");
+    const courses = await res.json();
+    if (!courses.length) {
+      empty.classList.remove("hidden");
+    } else {
+      empty.classList.add("hidden");
+      grid.innerHTML = courses.slice(0, 9).map((c) => courseCardHtml(c)).join("");
+      wireBookmarkButtons("catalog-grid");
+    }
+  } catch {
+    empty.textContent = "Failed to load catalog.";
+    empty.classList.remove("hidden");
+  }
+
+  document.getElementById("hero-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = e.target.querySelector('input[name="topic"]');
+    startGeneration((input.value || "").trim());
+  });
+  document.querySelectorAll("[data-chip]").forEach((btn) => {
+    btn.addEventListener("click", () => startGeneration(btn.dataset.chip));
+  });
+
+  if (queued) {
+    document.querySelector('#hero-form input[name="topic"]').value = queued;
+    startGeneration(queued);
+  }
+}
+
+async function startGeneration(topic) {
+  topic = (topic || "").trim();
   if (!topic) return;
 
   const overlay = document.getElementById("gen-overlay");
@@ -190,6 +444,7 @@ async function onSubmitTopic(e) {
         seen.add(data.node);
       } else if (event === "complete" && data.course_id) {
         steps.querySelectorAll("li").forEach((li) => (li.className = "step-done"));
+        addOwned(data.course_id);
         window.location.href = "/course/" + encodeURIComponent(data.course_id);
       } else if (event === "error") {
         errBox.textContent = data.message || "Generation failed.";
@@ -203,12 +458,83 @@ async function onSubmitTopic(e) {
 }
 
 // ========================================================================
+// SECTION PAGES — catalog / my-courses / bookmarks
+// ========================================================================
+
+async function renderSectionPage({ section }) {
+  renderSidebar(section);
+  renderTopbar({ search: true });
+
+  const grid = document.getElementById("catalog-grid");
+  const empty = document.getElementById("catalog-empty");
+  const count = document.getElementById("section-count");
+  const filterInput = document.getElementById("filter-input");
+  const sortSelect = document.getElementById("sort-select");
+
+  let allCourses = [];
+  try {
+    const res = await fetch("/api/catalog");
+    allCourses = await res.json();
+  } catch {
+    empty.textContent = "Failed to load courses.";
+    empty.classList.remove("hidden");
+    return;
+  }
+
+  // Filter by section.
+  let sectionCourses;
+  if (section === "my-courses") {
+    const owned = new Set(getOwned());
+    sectionCourses = allCourses.filter((c) => owned.has(c.course_id));
+  } else if (section === "bookmarks") {
+    const bm = new Set(getBookmarks());
+    sectionCourses = allCourses.filter((c) => bm.has(c.course_id));
+  } else {
+    sectionCourses = allCourses;
+  }
+
+  function render() {
+    let list = sectionCourses.slice();
+    const q = (filterInput.value || "").toLowerCase().trim();
+    if (q) list = list.filter((c) => c.topic.toLowerCase().includes(q));
+
+    const sort = sortSelect.value;
+    list.sort((a, b) => {
+      if (sort === "newest") return new Date(b.created_at) - new Date(a.created_at);
+      if (sort === "oldest") return new Date(a.created_at) - new Date(b.created_at);
+      if (sort === "az") return a.topic.localeCompare(b.topic);
+      if (sort === "za") return b.topic.localeCompare(a.topic);
+      if (sort === "videos") return (b.video_count || 0) - (a.video_count || 0);
+      return 0;
+    });
+
+    count.textContent = `${list.length} course${list.length === 1 ? "" : "s"}`;
+
+    if (!list.length) {
+      grid.innerHTML = "";
+      empty.classList.remove("hidden");
+    } else {
+      empty.classList.add("hidden");
+      grid.innerHTML = list.map((c) => courseCardHtml(c)).join("");
+      wireBookmarkButtons("catalog-grid");
+    }
+  }
+
+  filterInput.addEventListener("input", render);
+  sortSelect.addEventListener("change", render);
+  render();
+}
+
+// ========================================================================
 // COURSE PAGE
 // ========================================================================
 
 let COURSE = null;
 
 async function renderCoursePage() {
+  renderSidebar("home");
+  renderTopbar({ search: true });
+
   const courseId = decodeURIComponent(location.pathname.split("/").pop());
   const res = await fetch("/api/courses/" + encodeURIComponent(courseId));
   if (!res.ok) {
@@ -226,29 +552,41 @@ async function renderCoursePage() {
     `${(COURSE.videos || []).length} videos`;
   document.getElementById("course-created").textContent = timeAgo(COURSE.created_at);
 
-  // Apply theme gradient to the course header bar on the left of the chip
+  // Header gradient + bookmark action.
   const header = document.querySelector(".course-header");
-  if (header) header.style.background = `
-    linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.3)),
-    ${gradient}
-  `;
+  if (header) {
+    header.style.background = `linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.3)), ${gradient}`;
+    const bookmarked = isBookmarked(COURSE.course_id);
+    const actions = document.createElement("div");
+    actions.className = "course-header-actions";
+    actions.innerHTML = `
+      <button id="header-bookmark" class="header-action ${bookmarked ? "bookmarked" : ""}">
+        <svg class="h-3 w-3" fill="${bookmarked ? "currentColor" : "none"}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+        ${bookmarked ? "Bookmarked" : "Bookmark"}
+      </button>
+    `;
+    header.appendChild(actions);
+    document.getElementById("header-bookmark").addEventListener("click", () => {
+      const nowOn = toggleBookmark(COURSE.course_id);
+      const btn = document.getElementById("header-bookmark");
+      btn.classList.toggle("bookmarked", nowOn);
+      btn.querySelector("svg").setAttribute("fill", nowOn ? "currentColor" : "none");
+      btn.lastChild.textContent = nowOn ? " Bookmarked" : " Bookmark";
+    });
+  }
 
   renderVideos(COURSE.videos || []);
 
-  // Render cached summary / quiz if already present.
   if (COURSE.summary) showSummary(COURSE.summary);
   if ((COURSE.quiz || []).length) showQuiz(COURSE.quiz);
 
-  // Tabs
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
 
-  // Lazy generation
   document.getElementById("gen-summary-btn").addEventListener("click", () => generateSummary());
   document.getElementById("gen-quiz-btn").addEventListener("click", () => generateQuiz());
 
-  // Chat
   document.getElementById("chat-form").addEventListener("submit", onSendChat);
   document.getElementById("quiz-submit").addEventListener("click", onSubmitQuiz);
 }
@@ -288,26 +626,20 @@ function switchTab(tab) {
   document.querySelectorAll("[data-tab-panel]").forEach((p) => {
     const show = p.dataset.tabPanel === tab;
     p.classList.toggle("hidden", !show);
-    // chat panel uses flex column
     if (p.dataset.tabPanel === "chat" && show) p.classList.add("chat-wrap");
   });
 }
-
-// ---------- lazy summary ----------
 
 async function generateSummary() {
   document.getElementById("summary-empty").classList.add("hidden");
   document.getElementById("summary-loading").classList.remove("hidden");
   try {
-    const res = await fetch(
-      "/api/courses/" + encodeURIComponent(COURSE.course_id) + "/generate-summary",
-      { method: "POST" },
-    );
+    const res = await fetch("/api/courses/" + encodeURIComponent(COURSE.course_id) + "/generate-summary", { method: "POST" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     COURSE.summary = data.summary;
     showSummary(data.summary);
-  } catch (e) {
+  } catch {
     document.getElementById("summary-loading").classList.add("hidden");
     document.getElementById("summary-empty").classList.remove("hidden");
     alert("Summary generation failed. Try again.");
@@ -321,21 +653,16 @@ function showSummary(markdown) {
   el.classList.remove("hidden");
 }
 
-// ---------- lazy quiz ----------
-
 async function generateQuiz() {
   document.getElementById("quiz-empty").classList.add("hidden");
   document.getElementById("quiz-loading").classList.remove("hidden");
   try {
-    const res = await fetch(
-      "/api/courses/" + encodeURIComponent(COURSE.course_id) + "/generate-quiz",
-      { method: "POST" },
-    );
+    const res = await fetch("/api/courses/" + encodeURIComponent(COURSE.course_id) + "/generate-quiz", { method: "POST" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     COURSE.quiz = data.quiz;
     showQuiz(data.quiz);
-  } catch (e) {
+  } catch {
     document.getElementById("quiz-loading").classList.add("hidden");
     document.getElementById("quiz-empty").classList.remove("hidden");
     alert("Quiz generation failed. Try again.");
@@ -345,18 +672,15 @@ function showQuiz(quiz) {
   document.getElementById("quiz-empty").classList.add("hidden");
   document.getElementById("quiz-loading").classList.add("hidden");
   document.getElementById("quiz-body").classList.remove("hidden");
-
   const form = document.getElementById("quiz-form");
   form.innerHTML = quiz
     .map((q, i) => {
       const opts = q.options
-        .map(
-          (opt, j) => `
-            <label class="quiz-option">
-              <input type="radio" name="q${i}" value="${j}" />
-              <span>${escapeHtml(opt)}</span>
-            </label>`,
-        )
+        .map((opt, j) => `
+          <label class="quiz-option">
+            <input type="radio" name="q${i}" value="${j}" />
+            <span>${escapeHtml(opt)}</span>
+          </label>`)
         .join("");
       return `
         <fieldset>
@@ -367,16 +691,12 @@ function showQuiz(quiz) {
     .join("");
 }
 
-// ---------- chat ----------
-
 async function onSendChat(e) {
   e.preventDefault();
   const input = document.getElementById("chat-input");
   const msg = (input.value || "").trim();
   if (!msg) return;
   input.value = "";
-
-  // Remove empty placeholder if present.
   const empty = document.querySelector(".chat-empty");
   if (empty) empty.remove();
 
@@ -407,12 +727,10 @@ async function onSendChat(e) {
     answerSpan.textContent = "(stream failed)";
   }
 }
-
 function autoScrollChat() {
   const root = document.getElementById("chat-messages");
   root.scrollTop = root.scrollHeight;
 }
-
 function appendBubble(role, initialText) {
   const root = document.getElementById("chat-messages");
   const wrap = document.createElement("div");
@@ -423,8 +741,6 @@ function appendBubble(role, initialText) {
   return wrap;
 }
 
-// ---------- quiz grading ----------
-
 async function onSubmitQuiz() {
   const form = document.getElementById("quiz-form");
   const quiz = COURSE.quiz || [];
@@ -433,10 +749,7 @@ async function onSubmitQuiz() {
     const sel = form.querySelector(`input[name="q${i}"]:checked`);
     answers.push(sel ? Number(sel.value) : -1);
   }
-  if (answers.some((a) => a < 0)) {
-    alert("Please answer every question first.");
-    return;
-  }
+  if (answers.some((a) => a < 0)) { alert("Please answer every question first."); return; }
 
   const res = await fetch(
     "/api/courses/" + encodeURIComponent(COURSE.course_id) + "/quiz/grade",

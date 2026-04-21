@@ -13,18 +13,19 @@
 </head>
 <body class="text-slate-900 antialiased">
 
-  <header class="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-slate-200/80 bg-white/80 px-6 backdrop-blur">
-    <a href="/" class="flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900">
-      <span class="brand-mark">A</span>
-      AdaptivAI <span class="text-[10px] font-medium uppercase tracking-widest text-slate-400">mini</span>
-    </a>
-    <span class="text-slate-300">/</span>
-    <span id="course-topic" class="text-sm text-slate-600">Loading...</span>
-    <div class="ml-auto flex items-center gap-2 text-xs text-slate-500">
-      <span class="pulse-dot"></span>
-      Agent online
-    </div>
-  </header>
+  <div class="flex min-h-screen">
+    <div id="sidebar-slot"></div>
+    <div class="flex-1 min-w-0">
+      <div id="topbar-slot"></div>
+
+      <!-- Topic breadcrumb -->
+      <div class="border-b border-slate-200/80 bg-white/60 px-6 py-2 backdrop-blur">
+        <div class="mx-auto max-w-7xl text-xs text-slate-500">
+          <a href="/catalog" class="hover:text-slate-900">Catalog</a>
+          <span class="mx-2 text-slate-300">/</span>
+          <span id="course-topic" class="text-slate-700">Loading...</span>
+        </div>
+      </div>
 
   <main class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-6 py-8 lg:grid-cols-[65%_35%]">
 
@@ -131,6 +132,8 @@
       </div>
     </aside>
   </main>
+    </div>
+  </div>
 
   <script src="/static/app.js"></script>
   <script>renderCoursePage();</script>

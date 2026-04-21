@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AdaptivAI Mini — Sign in</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="text-slate-900 antialiased">
+  <main class="login-shell">
+
+    <!-- Brand side -->
+    <aside class="login-brand">
+      <div class="login-brand-grid"></div>
+      <div class="login-brand-glow login-brand-glow-a"></div>
+      <div class="login-brand-glow login-brand-glow-b"></div>
+
+      <div class="relative z-10 flex h-full flex-col p-12 text-white">
+        <div class="flex items-center gap-2">
+          <span class="brand-mark-lg">A</span>
+          <div class="leading-tight">
+            <div class="text-sm font-semibold">AdaptivAI</div>
+            <div class="text-[10px] uppercase tracking-widest text-white/60">mini</div>
+          </div>
+        </div>
+
+        <div class="mt-auto">
+          <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[11px] font-medium uppercase tracking-widest backdrop-blur">
+            <span class="pulse-dot pulse-dot-white"></span>
+            Agentic learning
+          </div>
+          <h1 class="text-4xl font-bold leading-tight">Type any topic.<br/>Learn it in a minute.</h1>
+          <p class="mt-4 max-w-sm text-white/80">
+            Courses assembled on demand from real YouTube videos — with a RAG chatbot, auto-generated summary, and quiz.
+          </p>
+          <div class="mt-8 flex items-center gap-3 text-sm text-white/70">
+            <span class="flex -space-x-2">
+              <span class="login-avatar">🐳</span>
+              <span class="login-avatar">⚛️</span>
+              <span class="login-avatar">🐍</span>
+              <span class="login-avatar">☸️</span>
+            </span>
+            <span class="text-xs">1,474+ topics supported · powered by LangGraph</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Form side -->
+    <section class="login-form-wrap">
+      <div class="w-full max-w-md">
+        <div class="mb-8 md:hidden flex items-center gap-2">
+          <span class="brand-mark">A</span>
+          <div class="leading-tight">
+            <div class="text-sm font-semibold">AdaptivAI</div>
+            <div class="text-[10px] uppercase tracking-widest text-slate-400">mini</div>
+          </div>
+        </div>
+
+        <h2 class="text-3xl font-bold tracking-tight">Welcome back</h2>
+        <p class="mt-2 text-sm text-slate-500">
+          Sign in to save courses and track what you've built. No password — this is a demo.
+        </p>
+
+        <form id="login-form" class="mt-8 space-y-4">
+          <div>
+            <label class="login-label">Your name</label>
+            <input id="login-name" required placeholder="Ada Lovelace" class="login-input" />
+          </div>
+          <div>
+            <label class="login-label">Email</label>
+            <input id="login-email" type="email" required placeholder="you@example.com" class="login-input" />
+          </div>
+
+          <div>
+            <label class="login-label">Pick an avatar</label>
+            <div id="avatar-picker" class="grid grid-cols-8 gap-2"></div>
+          </div>
+
+          <button class="login-submit mt-2" type="submit">
+            Sign in
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7-7 7M3 12h18"/></svg>
+          </button>
+        </form>
+
+        <div class="login-divider"><span>or</span></div>
+
+        <button id="guest-btn" class="login-guest">
+          Continue as guest
+        </button>
+
+        <p class="mt-8 text-center text-xs text-slate-400">
+          This is a demo. No password, no session token — your identity lives in your browser.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script>renderLoginPage();</script>
+</body>
+</html>

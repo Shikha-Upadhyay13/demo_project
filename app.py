@@ -42,6 +42,26 @@ def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/login")
+def login_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.get("/catalog")
+def catalog_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "catalog.html")
+
+
+@app.get("/my-courses")
+def my_courses_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "my-courses.html")
+
+
+@app.get("/bookmarks")
+def bookmarks_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "bookmarks.html")
+
+
 @app.get("/course/{course_id}")
 def course_page(course_id: str) -> FileResponse:
     # The HTML is static; app.js reads the id from the URL and hydrates.
