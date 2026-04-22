@@ -19,8 +19,11 @@ pip install -r requirements.txt
 cp .env.example .env     # fill in GROQ_API_KEY, YOUTUBE_API_KEY, LANGSMITH_API_KEY
 
 python scripts/smoke_test.py "Docker basics"              # CLI sanity check
-python -m uvicorn app:app --port 8000 --host 127.0.0.1    # start server
-# open http://127.0.0.1:8000         (API docs: http://127.0.0.1:8000/docs)
+python run.py                                              # start server (http://127.0.0.1:8000)
+# API docs auto-generated at http://127.0.0.1:8000/docs
+
+# If using Postgres backend (STORAGE_BACKEND=postgres), run the migration once first:
+python scripts/pg_migrate.py
 ```
 
 **Optional night-before**: `python scripts/pregen_courses.py` seeds 4 demo courses (Docker, React, Python, K8s).

@@ -7,11 +7,18 @@ The two streaming endpoints are the core agentic surface:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
+import sys
 import uuid
 from pathlib import Path
+
+# psycopg async requires SelectorEventLoop on Windows; ProactorEventLoop (uvicorn default) fails.
+# Must set BEFORE uvicorn creates the loop — i.e. at module import time.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from dotenv import load_dotenv
 

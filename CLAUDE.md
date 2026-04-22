@@ -11,9 +11,11 @@ Python 3.13 · **FastAPI** (async, SSE) · **LangGraph** (two `StateGraph`s, `As
 ```bash
 cd C:\Users\Sheetal\Desktop\demo && .venv\Scripts\activate
 python scripts/smoke_test.py "Docker basics"       # CLI sanity check
-python -m uvicorn app:app --port 8000 --host 127.0.0.1
+python run.py                                       # starts FastAPI on :8000
 # http://127.0.0.1:8000  ·  API docs auto-generated at /docs
 ```
+
+**Why `run.py` instead of `python -m uvicorn`?** On Windows, psycopg's async path requires `SelectorEventLoop`. Uvicorn's default is `ProactorEventLoop` and ignores pre-set policies. `run.py` sets the policy first then drives the loop via `asyncio.run(server.serve())`.
 
 ## File map
 
