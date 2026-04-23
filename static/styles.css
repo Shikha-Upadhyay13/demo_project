@@ -343,6 +343,12 @@ body { background: var(--bg); }
 
 /* ===== Chat ===== */
 .chat-wrap { display: flex; flex-direction: column; height: 65vh; }
+.chat-header {
+  display: flex; justify-content: flex-end; align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
 .chat-messages {
   flex: 1;
   padding: 16px;

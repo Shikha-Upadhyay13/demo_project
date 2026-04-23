@@ -593,6 +593,8 @@ async function renderCoursePage() {
     const idx = Number(chip.dataset.videoIdx);
     focusVideo(idx);
   });
+
+  initVoice();
 }
 
 function focusVideo(idx) {
@@ -601,6 +603,154 @@ function focusVideo(idx) {
   card.scrollIntoView({ behavior: "smooth", block: "center" });
   card.classList.add("is-cited");
   setTimeout(() => card.classList.remove("is-cited"), 1600);
+}
+
+// ========================================================================
+// VOICE MODE — Web Speech API (STT input + TTS output)
+// ========================================================================
+
+const VOICE_KEY = "adaptivai:speak_replies";
+let VOICE = {
+  stt: null,           // SpeechRecognition instance
+  ttsOn: false,        // toggle state
+  listening: false,
+  speaking: false,
+};
+
+function hasSTT() {
+  return "SpeechRecognition" in window || "webkitSpeechRecognition" in window;
+}
+function hasTTS() {
+  return "speechSynthesis" in window && typeof window.SpeechSynthesisUtterance === "function";
+}
+
+function initVoice() {
+  // Speaker toggle (TTS).
+  if (hasTTS()) {
+    const toggle = document.getElementById("speaker-toggle");
+    const header = document.getElementById("chat-header");
+    if (toggle && header) {
+      header.classList.remove("hidden");
+      VOICE.ttsOn = localStorage.getItem(VOICE_KEY) === "1";
+      applySpeakerToggleUi(toggle);
+      toggle.addEventListener("click", () => {
+        VOICE.ttsOn = !VOICE.ttsOn;
+        localStorage.setItem(VOICE_KEY, VOICE.ttsOn ? "1" : "0");
+        applySpeakerToggleUi(toggle);
+        // If turning off mid-speech, cancel queued utterances.
+        if (!VOICE.ttsOn) cancelSpeech();
+      });
+    }
+  }
+
+  // Mic button (STT).
+  if (hasSTT()) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SpeechRecognition();
+    rec.lang = "en-US";
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+
+    const micBtn = document.getElementById("mic-btn");
+    const input = document.getElementById("chat-input");
+    if (!micBtn || !input) return;
+    micBtn.classList.remove("hidden");
+
+    let finalTranscript = "";
+    let lastConfidence = 0;
+
+    rec.addEventListener("result", (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const result = e.results[i];
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript;
+          lastConfidence = result[0].confidence || 0;
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      input.value = (finalTranscript + interim).trim();
+    });
+
+    rec.addEventListener("end", () => {
+      setListening(false);
+      const text = input.value.trim();
+      if (text && (lastConfidence >= 0.7 || lastConfidence === 0)) {
+        // confidence==0 is common when the engine doesn't report one; still
+        // auto-submit unless transcript is empty.
+        document.getElementById("chat-form").requestSubmit();
+      }
+    });
+
+    rec.addEventListener("error", (e) => {
+      setListening(false);
+      console.warn("SpeechRecognition error:", e.error);
+    });
+
+    micBtn.addEventListener("click", () => {
+      if (VOICE.listening) { rec.stop(); return; }
+      // User is typing → don't start listening.
+      finalTranscript = "";
+      lastConfidence = 0;
+      input.value = "";
+      try {
+        rec.start();
+        setListening(true);
+      } catch (err) {
+        console.warn("mic start failed:", err);
+      }
+    });
+
+    // User typing while mic is active → abort.
+    input.addEventListener("input", () => {
+      if (VOICE.listening && document.activeElement === input) rec.abort();
+    });
+
+    VOICE.stt = rec;
+  }
+}
+
+function applySpeakerToggleUi(toggle) {
+  toggle.classList.toggle("speaker-toggle--on", VOICE.ttsOn);
+  toggle.setAttribute("aria-pressed", VOICE.ttsOn ? "true" : "false");
+  toggle.querySelector("span").textContent = VOICE.ttsOn ? "Speaking replies" : "Speak replies";
+}
+
+function setListening(on) {
+  VOICE.listening = on;
+  const btn = document.getElementById("mic-btn");
+  if (btn) btn.classList.toggle("mic-btn--listening", on);
+}
+
+function speakReply(text) {
+  if (!VOICE.ttsOn || !hasTTS() || !text) return;
+  // Prepare text: strip [Video N] brackets (spoken as "video N"),
+  // strip markdown emphasis markers, collapse whitespace.
+  const spoken = text
+    .replace(/\[Video (\d+)\]/g, "Video $1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!spoken) return;
+  // Split on sentence boundaries; queue each utterance so replies start
+  // playing before the full answer is assembled.
+  cancelSpeech();
+  const sentences = spoken.split(/(?<=[.!?])\s+/).filter(Boolean);
+  for (const s of sentences) {
+    const u = new SpeechSynthesisUtterance(s);
+    u.rate = 1.02;
+    u.pitch = 1;
+    window.speechSynthesis.speak(u);
+  }
+  VOICE.speaking = true;
+}
+
+function cancelSpeech() {
+  if (hasTTS()) window.speechSynthesis.cancel();
+  VOICE.speaking = false;
 }
 
 function renderVideos(videos) {
@@ -748,6 +898,8 @@ async function onSendChat(e) {
   const msg = (input.value || "").trim();
   if (!msg) return;
   input.value = "";
+  // Cancel any in-flight speech from the previous reply.
+  cancelSpeech();
   const empty = document.querySelector(".chat-empty");
   if (empty) empty.remove();
 
@@ -790,6 +942,8 @@ async function onSendChat(e) {
     removeTyping();
     // Post-process citations on the finalized text.
     if (rawText) answerSpan.innerHTML = renderCitationChips(rawText);
+    // Speak the reply if the toggle is on.
+    if (rawText) speakReply(rawText);
   } catch {
     removeTyping();
     answerSpan.textContent = "(stream failed)";
