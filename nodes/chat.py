@@ -14,14 +14,28 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
 from langsmith import traceable
 
+from functools import lru_cache
+
 from models.schemas import RouteDecision
 from store.catalog import get as get_course
 from store.chroma_client import get_vector_store
 
 log = logging.getLogger(__name__)
 
+
+@lru_cache(maxsize=256)
+def _cached_video_count(course_id: str) -> int:
+    """Cache per-course video count. Courses only gain videos at creation time,
+    so this is safe to memoize for the process lifetime."""
+    course = get_course(course_id)
+    return (course or {}).get("video_count", 0)
+
 ROUTER_MODEL = os.environ.get("ROUTER_MODEL", "llama-3.1-8b-instant")
-ANSWER_MODEL = os.environ.get("ANSWER_MODEL", "llama-3.3-70b-versatile")
+# 8b-instant is ~5x faster than 70b on Groq's free tier and the quality
+# drop is modest when the answer is already grounded in retrieved chunks.
+# Override with ANSWER_MODEL=llama-3.3-70b-versatile if you want the bigger
+# model and are on a paid tier.
+ANSWER_MODEL = os.environ.get("ANSWER_MODEL", "llama-3.1-8b-instant")
 SMALL_MODEL = os.environ.get("SMALL_MODEL", "llama-3.1-8b-instant")
 
 ROUTER_PROMPT = """Classify the user's latest message in a course chatbot.
@@ -143,13 +157,15 @@ def retrieve_and_answer(state: dict) -> dict:
     """Pull top-k chunks and answer the question, grounded in transcripts."""
     course_id = state["course_id"]
     vs = get_vector_store(course_id)
-    retriever = vs.as_retriever(search_kwargs={"k": 6})
+    # k=4 keeps the context window tight for Groq's free-tier TPM. Quality
+    # concern (splits mid-concept) was already addressed by sentence-grouping
+    # in nodes/video.py before chunking.
+    retriever = vs.as_retriever(search_kwargs={"k": 4})
     docs = retriever.invoke(state["user_message"])
     context, raw_chunks = _build_context(docs)
 
-    # Total videos in course — used to validate citations.
-    course = get_course(course_id)
-    num_videos = (course or {}).get("video_count", 0)
+    # Cached per-process — avoids a DB hit on every chat turn.
+    num_videos = _cached_video_count(course_id)
 
     topic_hint = ""  # not strictly needed for answer quality; chunks carry enough context
     prompt = ChatPromptTemplate.from_template(RAG_PROMPT)

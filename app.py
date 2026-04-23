@@ -44,6 +44,30 @@ app = FastAPI(title="AdaptivAI Mini", docs_url="/docs")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+@app.on_event("startup")
+async def _warm_embeddings() -> None:
+    """Preload HuggingFace embeddings + tokenize once so the first chat is
+    fast. Without this, the first retrieval pays a ~20s hit to download
+    config files from HF Hub (unauthenticated → rate-limited) and load
+    BertModel weights."""
+    def _warmup() -> None:
+        try:
+            from store.chroma_client import get_vector_store
+
+            # Arbitrary course_id — creating the Chroma/PGVector wrapper triggers
+            # HuggingFaceEmbeddings instantiation (which is @lru_cached), which
+            # loads the model + downloads any missing config files.
+            vs = get_vector_store("__warmup__")
+            # Force the embedding pipeline to run once so the tokenizer + model
+            # weights are actually resident in memory.
+            vs.embeddings.embed_query("warmup")
+            log.info("embeddings warm-up complete")
+        except Exception as e:
+            log.warning("embeddings warm-up skipped: %s", e)
+
+    await asyncio.to_thread(_warmup)
+
+
 # ---------- Page routes ----------
 
 @app.get("/")

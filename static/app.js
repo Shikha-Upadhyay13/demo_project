@@ -637,9 +637,17 @@ function initVoice() {
         VOICE.ttsOn = !VOICE.ttsOn;
         localStorage.setItem(VOICE_KEY, VOICE.ttsOn ? "1" : "0");
         applySpeakerToggleUi(toggle);
-        // If turning off mid-speech, cancel queued utterances.
         if (!VOICE.ttsOn) cancelSpeech();
       });
+    }
+  }
+
+  // Voice call button — needs both STT and TTS.
+  if (hasSTT() && hasTTS()) {
+    const callBtn = document.getElementById("call-start-btn");
+    if (callBtn) {
+      callBtn.classList.remove("hidden");
+      callBtn.addEventListener("click", openCallMode);
     }
   }
 
@@ -751,6 +759,223 @@ function speakReply(text) {
 function cancelSpeech() {
   if (hasTTS()) window.speechSynthesis.cancel();
   VOICE.speaking = false;
+}
+
+// ========================================================================
+// VOICE CALL MODE — ChatGPT-style continuous conversation
+// ========================================================================
+
+const CALL = {
+  active: false,
+  state: "idle",     // idle | listening | thinking | speaking
+  rec: null,
+  muted: false,
+};
+
+function openCallMode() {
+  if (!hasSTT() || !hasTTS()) {
+    alert("Voice call needs a browser that supports speech recognition (Chrome, Edge, or Safari).");
+    return;
+  }
+  if (CALL.active) return;
+  CALL.active = true;
+  CALL.muted = false;
+  renderCallOverlay();
+  cancelSpeech();
+  // Small delay before starting mic so the overlay animation doesn't fight the permission prompt.
+  setTimeout(() => startCallListening(), 250);
+}
+
+function renderCallOverlay() {
+  const existing = document.getElementById("call-overlay");
+  if (existing) existing.remove();
+
+  const ov = document.createElement("div");
+  ov.id = "call-overlay";
+  ov.className = "call-overlay";
+  const topic = (COURSE && COURSE.topic) || "this course";
+  ov.innerHTML = `
+    <div class="call-card">
+      <div class="call-caption">Voice call · ${escapeHtml(topic)}</div>
+      <div id="call-orb" class="call-orb" data-state="idle"></div>
+      <div id="call-status" class="call-status">Starting...</div>
+      <div id="call-transcript" class="call-transcript"></div>
+      <div class="call-actions">
+        <button id="call-mute" class="call-btn call-btn-mute" title="Mute microphone">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3zM19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
+        </button>
+        <button id="call-end" class="call-btn call-btn-end" title="End call">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(135deg)"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.95.68l1.5 4.5a1 1 0 01-.5 1.2l-2.26 1.13a11 11 0 006.51 6.51l1.13-2.26a1 1 0 011.2-.5l4.5 1.5a1 1 0 01.68.95V19a2 2 0 01-2 2h-1C9.72 21 3 14.28 3 6V5z"/></svg>
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(ov);
+
+  document.getElementById("call-end").addEventListener("click", closeCallMode);
+  document.getElementById("call-mute").addEventListener("click", toggleCallMute);
+  document.addEventListener("keydown", callKeyHandler);
+}
+
+function callKeyHandler(e) {
+  if (!CALL.active) return;
+  if (e.key === "Escape") closeCallMode();
+}
+
+function toggleCallMute() {
+  CALL.muted = !CALL.muted;
+  const btn = document.getElementById("call-mute");
+  if (btn) btn.classList.toggle("is-muted", CALL.muted);
+  if (CALL.muted) {
+    if (CALL.rec) { try { CALL.rec.abort(); } catch {} }
+    setCallState("idle", "Muted");
+  } else {
+    // Unmute → resume listening if we're idle (not mid-reply).
+    if (CALL.state === "idle") startCallListening();
+  }
+}
+
+function setCallState(s, customLabel) {
+  CALL.state = s;
+  const orb = document.getElementById("call-orb");
+  const status = document.getElementById("call-status");
+  if (orb) orb.dataset.state = s;
+  const labels = {
+    idle: "Ready",
+    listening: "Listening...",
+    thinking: "Thinking...",
+    speaking: "Speaking",
+  };
+  if (status) status.textContent = customLabel || labels[s] || s;
+}
+
+function setCallTranscript(you, ai) {
+  const t = document.getElementById("call-transcript");
+  if (!t) return;
+  const parts = [];
+  if (you) parts.push(`<div class="call-you">${escapeHtml(you)}</div>`);
+  if (ai) parts.push(`<div class="call-ai">${escapeHtml(ai)}</div>`);
+  t.innerHTML = parts.join("");
+}
+
+function startCallListening() {
+  if (!CALL.active || CALL.muted) return;
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new SpeechRecognition();
+  rec.lang = "en-US";
+  rec.interimResults = true;
+  rec.continuous = false;
+  rec.maxAlternatives = 1;
+
+  let finalText = "";
+
+  rec.addEventListener("result", (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) finalText += r[0].transcript;
+      else interim += r[0].transcript;
+    }
+    setCallTranscript((finalText + interim).trim(), "");
+  });
+
+  rec.addEventListener("end", () => {
+    if (!CALL.active) return;
+    const text = finalText.trim();
+    if (!text) {
+      // Silence — loop back to listening after a brief pause.
+      if (!CALL.muted) setTimeout(startCallListening, 200);
+      return;
+    }
+    handleCallTurn(text);
+  });
+
+  rec.addEventListener("error", (e) => {
+    if (!CALL.active) return;
+    if (e.error === "no-speech" || e.error === "aborted") {
+      if (!CALL.muted) setTimeout(startCallListening, 200);
+      return;
+    }
+    setCallState("idle", "Mic error: " + e.error);
+    setTimeout(closeCallMode, 1500);
+  });
+
+  try {
+    rec.start();
+    CALL.rec = rec;
+    setCallState("listening");
+  } catch (err) {
+    console.warn("call: rec.start failed", err);
+  }
+}
+
+async function handleCallTurn(userText) {
+  setCallState("thinking");
+  setCallTranscript(userText, "…");
+
+  const reply = await submitChatMessage(userText, {
+    onToken: (soFar) => {
+      // Update the call transcript as tokens stream so the user sees progress.
+      if (CALL.state === "thinking") setCallState("thinking", "Thinking...");
+      setCallTranscript(userText, soFar);
+    },
+  });
+
+  if (!CALL.active) return;
+
+  if (!reply) {
+    setCallState("idle", "No reply. Try again.");
+    setTimeout(() => { if (CALL.active) startCallListening(); }, 800);
+    return;
+  }
+
+  setCallState("speaking");
+  setCallTranscript(userText, reply);
+
+  speakAndLoop(reply);
+}
+
+function speakAndLoop(text) {
+  if (!hasTTS()) { if (CALL.active) startCallListening(); return; }
+  const spoken = text
+    .replace(/\[Video (\d+)\]/g, "Video $1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  window.speechSynthesis.cancel();
+
+  const sentences = spoken.split(/(?<=[.!?])\s+/).filter(Boolean);
+  if (!sentences.length) { if (CALL.active) startCallListening(); return; }
+
+  let idx = 0;
+  const speakNext = () => {
+    if (!CALL.active) return;
+    if (idx >= sentences.length) {
+      setCallState("idle", "Your turn");
+      setTimeout(() => { if (CALL.active && !CALL.muted) startCallListening(); }, 300);
+      return;
+    }
+    const u = new SpeechSynthesisUtterance(sentences[idx++]);
+    u.rate = 1.02;
+    u.pitch = 1;
+    u.onend = speakNext;
+    u.onerror = speakNext;
+    window.speechSynthesis.speak(u);
+  };
+  speakNext();
+}
+
+function closeCallMode() {
+  CALL.active = false;
+  if (CALL.rec) { try { CALL.rec.abort(); } catch {} CALL.rec = null; }
+  cancelSpeech();
+  document.removeEventListener("keydown", callKeyHandler);
+  const ov = document.getElementById("call-overlay");
+  if (ov) ov.remove();
 }
 
 function renderVideos(videos) {
@@ -898,7 +1123,12 @@ async function onSendChat(e) {
   const msg = (input.value || "").trim();
   if (!msg) return;
   input.value = "";
-  // Cancel any in-flight speech from the previous reply.
+  const reply = await submitChatMessage(msg);
+  if (reply && VOICE.ttsOn) speakReply(reply);
+}
+
+async function submitChatMessage(msg, opts = {}) {
+  // Submit a message to the chat stream, append bubbles, return the finalized reply text.
   cancelSpeech();
   const empty = document.querySelector(".chat-empty");
   if (empty) empty.remove();
@@ -933,6 +1163,7 @@ async function onSendChat(e) {
           rawText += data.text;
           answerSpan.textContent = rawText;
           autoScrollChat();
+          if (opts.onToken) opts.onToken(rawText);
         } else if (event === "error") {
           removeTyping();
           answerSpan.textContent = "(error: " + data.message + ")";
@@ -940,13 +1171,12 @@ async function onSendChat(e) {
       },
     );
     removeTyping();
-    // Post-process citations on the finalized text.
     if (rawText) answerSpan.innerHTML = renderCitationChips(rawText);
-    // Speak the reply if the toggle is on.
-    if (rawText) speakReply(rawText);
+    return rawText;
   } catch {
     removeTyping();
     answerSpan.textContent = "(stream failed)";
+    return "";
   }
 }
 
