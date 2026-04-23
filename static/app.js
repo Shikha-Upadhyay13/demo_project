@@ -112,22 +112,11 @@ const TOPIC_ICONS = [
   { kw: ["api", "rest", "http"], emoji: "🔌" },
   { kw: ["ml", "pytorch", "tensorflow", "neural", "model"], emoji: "🧠" },
 ];
-const GRADIENTS = [
-  "linear-gradient(135deg, #6366f1 0%, #8b5cf6 60%, #d946ef 100%)",
-  "linear-gradient(135deg, #0ea5e9 0%, #6366f1 60%, #8b5cf6 100%)",
-  "linear-gradient(135deg, #10b981 0%, #14b8a6 60%, #0ea5e9 100%)",
-  "linear-gradient(135deg, #f59e0b 0%, #ef4444 60%, #ec4899 100%)",
-  "linear-gradient(135deg, #8b5cf6 0%, #ec4899 60%, #f97316 100%)",
-  "linear-gradient(135deg, #0891b2 0%, #06b6d4 60%, #22d3ee 100%)",
-  "linear-gradient(135deg, #4f46e5 0%, #ec4899 60%, #f97316 100%)",
-];
 function themeFor(topic) {
   const t = (topic || "").toLowerCase();
   const entry = TOPIC_ICONS.find((e) => e.kw.some((k) => t.includes(k)));
   const emoji = entry ? entry.emoji : "✨";
-  let h = 0;
-  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
-  return { emoji, gradient: GRADIENTS[h % GRADIENTS.length] };
+  return { emoji };
 }
 function timeAgo(iso) {
   const t = new Date(iso).getTime();
@@ -174,9 +163,9 @@ function renderSidebar(activeSlug) {
         `).join("")}
       </nav>
       <div class="sidebar-footer">
-        <div class="rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-4 text-white">
-          <div class="text-xs font-semibold uppercase tracking-wider opacity-80">Agent mode</div>
-          <div class="mt-1 text-sm font-medium">Every course here was built by an LLM agent — not a content team.</div>
+        <div class="sidebar-status">
+          <div class="sidebar-status-row"><span class="pulse-dot"></span><b>All systems up</b></div>
+          <div class="sidebar-status-row">v0.1 · agent-generated courses</div>
         </div>
       </div>
     </aside>
@@ -322,7 +311,7 @@ function renderLoginPage() {
 
 function courseCardHtml(c, opts = {}) {
   const when = c.created_at ? timeAgo(c.created_at) : "";
-  const { emoji, gradient } = themeFor(c.topic);
+  const { emoji } = themeFor(c.topic);
   const bookmarked = isBookmarked(c.course_id);
   const showBookmark = opts.bookmark !== false;
   return `
@@ -335,11 +324,11 @@ function courseCardHtml(c, opts = {}) {
         </button>
       ` : ""}
       <a href="/course/${encodeURIComponent(c.course_id)}" class="course-card">
-        <div class="course-card-header" style="background: ${gradient}">
+        <div class="course-card-header">
           <span class="course-card-emoji">${emoji}</span>
         </div>
         <div class="course-card-body">
-          <div class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Course</div>
+          <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">Course</div>
           <div class="mt-1 course-card-topic">${escapeHtml(c.topic)}</div>
           <div class="course-card-meta">
             <span>${c.video_count} video${c.video_count === 1 ? "" : "s"} · ${escapeHtml(when)}</span>
@@ -543,7 +532,7 @@ async function renderCoursePage() {
   }
   COURSE = await res.json();
 
-  const { emoji, gradient } = themeFor(COURSE.topic);
+  const { emoji } = themeFor(COURSE.topic);
 
   document.getElementById("course-topic").textContent = COURSE.topic;
   document.getElementById("course-title").innerHTML =
@@ -552,17 +541,15 @@ async function renderCoursePage() {
     `${(COURSE.videos || []).length} videos`;
   document.getElementById("course-created").textContent = timeAgo(COURSE.created_at);
 
-  // Header gradient + bookmark action.
   const header = document.querySelector(".course-header");
   if (header) {
-    header.style.background = `linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.3)), ${gradient}`;
     const bookmarked = isBookmarked(COURSE.course_id);
     const actions = document.createElement("div");
     actions.className = "course-header-actions";
     actions.innerHTML = `
       <button id="header-bookmark" class="header-action ${bookmarked ? "bookmarked" : ""}">
         <svg class="h-3 w-3" fill="${bookmarked ? "currentColor" : "none"}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
-        ${bookmarked ? "Bookmarked" : "Bookmark"}
+        <span class="bookmark-label">${bookmarked ? "Bookmarked" : "Bookmark"}</span>
       </button>
     `;
     header.appendChild(actions);
@@ -571,7 +558,7 @@ async function renderCoursePage() {
       const btn = document.getElementById("header-bookmark");
       btn.classList.toggle("bookmarked", nowOn);
       btn.querySelector("svg").setAttribute("fill", nowOn ? "currentColor" : "none");
-      btn.lastChild.textContent = nowOn ? " Bookmarked" : " Bookmark";
+      btn.querySelector(".bookmark-label").textContent = nowOn ? "Bookmarked" : "Bookmark";
     });
   }
 
@@ -589,6 +576,31 @@ async function renderCoursePage() {
 
   document.getElementById("chat-form").addEventListener("submit", onSendChat);
   document.getElementById("quiz-submit").addEventListener("click", onSubmitQuiz);
+
+  // Wire example-prompt chips in chat empty state.
+  document.querySelectorAll("[data-suggest]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const input = document.getElementById("chat-input");
+      input.value = btn.dataset.suggest;
+      document.getElementById("chat-form").requestSubmit();
+    });
+  });
+
+  // Delegate clicks on citation chips → scroll + highlight the source video.
+  document.getElementById("chat-messages").addEventListener("click", (e) => {
+    const chip = e.target.closest(".cite-chip");
+    if (!chip) return;
+    const idx = Number(chip.dataset.videoIdx);
+    focusVideo(idx);
+  });
+}
+
+function focusVideo(idx) {
+  const card = document.querySelector(`[data-video-index="${idx}"]`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.classList.add("is-cited");
+  setTimeout(() => card.classList.remove("is-cited"), 1600);
 }
 
 function renderVideos(videos) {
@@ -597,26 +609,65 @@ function renderVideos(videos) {
   root.innerHTML = videos
     .map((v, i) => {
       const transcript = transcripts[i] || "";
+      const formatted = formatTranscriptForDisplay(transcript);
       return `
-        <article class="video-card">
+        <article class="video-card" data-video-index="${i}">
           <div class="aspect-video w-full bg-black">
             <iframe src="https://www.youtube.com/embed/${escapeHtml(v.id)}" title="${escapeHtml(v.title)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
           </div>
           <div class="p-4">
-            <div class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Video ${i + 1} · ${escapeHtml(v.channel || "")}</div>
-            <div class="mt-1 font-medium">${escapeHtml(v.title)}</div>
-            <details class="mt-3 text-sm text-slate-600">
-              <summary class="inline-flex items-center gap-1 text-indigo-600">
+            <div class="text-[11px] font-medium uppercase tracking-wider text-stone-400">Video ${i + 1} · ${escapeHtml(v.channel || "")}</div>
+            <div class="mt-1.5 font-medium text-[15px]">${escapeHtml(v.title)}</div>
+            <details class="mt-3 text-sm">
+              <summary class="inline-flex items-center gap-1.5 text-indigo-700 text-xs font-medium">
                 <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                 Show transcript
               </summary>
-              <pre class="mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">${escapeHtml(transcript)}</pre>
+              <div class="transcript-block" data-transcript-raw="${escapeHtml(transcript)}">${escapeHtml(formatted)}</div>
+              <div class="transcript-actions">
+                <button class="transcript-copy" data-copy-transcript="${i}">
+                  <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-2M8 5a2 2 0 002 2h4a2 2 0 002-2M8 5a2 2 0 012-2h4a2 2 0 012 2m0 0h2a2 2 0 012 2v3"/></svg>
+                  Copy
+                </button>
+              </div>
             </details>
           </div>
         </article>
       `;
     })
     .join("");
+
+  root.querySelectorAll("[data-copy-transcript]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const idx = Number(btn.dataset.copyTranscript);
+      const raw = (COURSE.transcripts || [])[idx] || "";
+      try {
+        await navigator.clipboard.writeText(raw);
+        const prev = btn.innerHTML;
+        btn.innerHTML = "<span>Copied ✓</span>";
+        setTimeout(() => { btn.innerHTML = prev; }, 1200);
+      } catch {}
+    });
+  });
+}
+
+// Format a raw YouTube caption dump into readable paragraphs.
+// Captions are usually one short phrase per line with no punctuation;
+// group ~8 lines into a paragraph for display.
+function formatTranscriptForDisplay(raw) {
+  if (!raw) return "";
+  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const paragraphs = [];
+  let chunk = [];
+  for (const line of lines) {
+    chunk.push(line);
+    if (chunk.length >= 8) {
+      paragraphs.push(chunk.join(" "));
+      chunk = [];
+    }
+  }
+  if (chunk.length) paragraphs.push(chunk.join(" "));
+  return paragraphs.join("\n\n");
 }
 
 function switchTab(tab) {
@@ -701,8 +752,18 @@ async function onSendChat(e) {
   if (empty) empty.remove();
 
   appendBubble("user", msg);
-  const placeholder = appendBubble("ai", "");
+  const placeholder = appendBubble("ai", "", { typing: true });
+  const bubble = placeholder.querySelector(".bubble");
   const answerSpan = placeholder.querySelector(".bubble-text");
+  let typingRemoved = false;
+  let rawText = "";
+
+  const removeTyping = () => {
+    if (typingRemoved) return;
+    const dots = placeholder.querySelector(".typing-dots");
+    if (dots) dots.remove();
+    typingRemoved = true;
+  };
 
   try {
     await streamSSE(
@@ -714,28 +775,46 @@ async function onSendChat(e) {
           chip.className = "route-chip " + data.route;
           chip.textContent = "router → " + data.route;
           placeholder.prepend(chip);
-          if (data.route === "unclear") placeholder.querySelector(".bubble").classList.add("clarify");
+          if (data.route === "unclear") bubble.classList.add("clarify");
         } else if (event === "token") {
-          answerSpan.textContent += data.text;
+          removeTyping();
+          rawText += data.text;
+          answerSpan.textContent = rawText;
           autoScrollChat();
         } else if (event === "error") {
+          removeTyping();
           answerSpan.textContent = "(error: " + data.message + ")";
         }
       },
     );
+    removeTyping();
+    // Post-process citations on the finalized text.
+    if (rawText) answerSpan.innerHTML = renderCitationChips(rawText);
   } catch {
+    removeTyping();
     answerSpan.textContent = "(stream failed)";
   }
 }
+
+function renderCitationChips(text) {
+  const escaped = escapeHtml(text);
+  return escaped.replace(/\[Video (\d+)\]/g, (_, n) => {
+    return `<button class="cite-chip" data-video-idx="${Number(n) - 1}">Video ${n}</button>`;
+  });
+}
+
 function autoScrollChat() {
   const root = document.getElementById("chat-messages");
   root.scrollTop = root.scrollHeight;
 }
-function appendBubble(role, initialText) {
+function appendBubble(role, initialText, opts = {}) {
   const root = document.getElementById("chat-messages");
   const wrap = document.createElement("div");
   wrap.className = "flex flex-col " + (role === "user" ? "items-end" : "items-start");
-  wrap.innerHTML = `<div class="bubble bubble-${role}"><span class="bubble-text">${escapeHtml(initialText)}</span></div>`;
+  const content = opts.typing
+    ? `<span class="typing-dots"><span></span><span></span><span></span></span><span class="bubble-text"></span>`
+    : `<span class="bubble-text">${escapeHtml(initialText)}</span>`;
+  wrap.innerHTML = `<div class="bubble bubble-${role}">${content}</div>`;
   root.appendChild(wrap);
   autoScrollChat();
   return wrap;
@@ -762,20 +841,20 @@ async function onSubmitQuiz() {
   out.classList.remove("hidden");
   const pct = Math.round((data.score / data.total) * 100);
   out.innerHTML = `
-    <div class="mb-4 rounded-xl bg-gradient-to-br from-indigo-50 to-violet-50 p-4 border border-indigo-100">
-      <div class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Your score</div>
-      <div class="mt-1 text-2xl font-bold text-slate-900">${data.score} / ${data.total} <span class="text-sm font-medium text-slate-500">(${pct}%)</span></div>
+    <div class="mb-4 rounded-xl p-4 border" style="background: var(--accent-soft); border-color: transparent;">
+      <div class="text-xs font-semibold uppercase tracking-wider" style="color: var(--accent);">Your score</div>
+      <div class="mt-1 text-2xl font-semibold text-stone-900">${data.score} / ${data.total} <span class="text-sm font-medium text-stone-500">(${pct}%)</span></div>
     </div>
-    <ol class="space-y-2 text-sm">
+    <ol class="space-y-3 text-sm">
       ${data.feedback
         .map((f, i) => {
           const q = quiz[i];
           const correct = q.options[f.correct_idx];
           return `
             <li class="${f.correct ? "quiz-feedback-correct" : "quiz-feedback-wrong"}">
-              <div class="font-medium text-slate-900">${i + 1}. ${escapeHtml(q.q)}</div>
+              <div class="font-medium text-stone-900">${i + 1}. ${escapeHtml(q.q)}</div>
               <div class="mt-1 text-xs ${f.correct ? "text-emerald-700" : "text-rose-700"}">${f.correct ? "✓ Correct" : "✗ Incorrect"} · Answer: <b>${escapeHtml(correct)}</b></div>
-              <div class="mt-1 text-xs text-slate-600">${escapeHtml(f.explanation)}</div>
+              <div class="mt-1 text-xs text-stone-600">${escapeHtml(f.explanation)}</div>
             </li>`;
         })
         .join("")}

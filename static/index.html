@@ -20,16 +20,15 @@
 
       <!-- Hero -->
       <section class="hero">
-        <div class="hero-glow"></div>
         <div class="relative mx-auto max-w-3xl px-6 py-20 text-center">
-          <div class="inline-flex items-center gap-2 rounded-full border border-indigo-200/60 bg-white/70 px-3 py-1 text-[11px] font-medium uppercase tracking-wider text-indigo-600 shadow-sm backdrop-blur">
+          <div class="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium uppercase tracking-wider text-stone-600">
             <span class="pulse-dot pulse-dot-indigo"></span>
             Agentic · LangChain · LangGraph · LangSmith
           </div>
-          <h1 class="mt-5 text-5xl font-bold tracking-tight text-slate-900">
-            Explore training <span class="bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 bg-clip-text text-transparent">your way</span>
+          <h1 class="mt-6 text-5xl font-semibold tracking-tight text-stone-900">
+            Explore training your way
           </h1>
-          <p class="mx-auto mt-4 max-w-xl text-slate-600">
+          <p class="mx-auto mt-5 max-w-xl text-stone-600 text-[15px] leading-relaxed">
             Type any tech topic. Our agent finds the best YouTube videos, reads their transcripts, and assembles a full mini-course in under a minute.
           </p>
           <form id="hero-form" class="mx-auto mt-8 flex max-w-xl flex-col gap-2 sm:flex-row">
@@ -40,7 +39,7 @@
             </button>
           </form>
           <div class="mt-6 flex flex-wrap items-center justify-center gap-2">
-            <span class="text-xs text-slate-400">or try:</span>
+            <span class="text-xs text-stone-400">or try:</span>
             <button class="chip" data-chip="Docker basics">🐳 Docker basics</button>
             <button class="chip" data-chip="React Hooks">⚛️ React Hooks</button>
             <button class="chip" data-chip="Python decorators">🐍 Python decorators</button>
@@ -51,14 +50,14 @@
       </section>
 
       <!-- Recent courses -->
-      <section class="bg-white px-6 pb-20 pt-10">
+      <section class="px-6 pb-20 pt-12">
         <div class="mx-auto max-w-6xl">
           <div class="mb-6 flex items-end justify-between">
             <div>
-              <h2 class="text-2xl font-semibold tracking-tight">Recent courses</h2>
-              <p class="text-sm text-slate-500">The latest agent-generated courses across this workspace.</p>
+              <h2 class="text-2xl font-semibold tracking-tight text-stone-900">Recent courses</h2>
+              <p class="text-sm text-stone-500">The latest agent-generated courses across this workspace.</p>
             </div>
-            <a href="/catalog" class="text-sm font-medium text-indigo-600 hover:underline">View all →</a>
+            <a href="/catalog" class="text-sm font-medium text-indigo-700 hover:underline">View all →</a>
           </div>
 
           <div id="catalog-grid" class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"></div>
@@ -76,19 +75,18 @@
   </div>
 
   <!-- Generation modal -->
-  <div id="gen-overlay" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/70 p-4 backdrop-blur-md">
+  <div id="gen-overlay" class="fixed inset-0 z-50 hidden items-center justify-center bg-stone-900/60 p-4 backdrop-blur-sm">
     <div class="modal w-full max-w-md">
-      <div class="modal-glow"></div>
       <div class="flex items-center gap-3">
         <div class="relative h-10 w-10">
-          <span class="absolute inset-0 animate-ping rounded-full bg-indigo-500/40"></span>
-          <span class="relative grid h-full w-full place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
+          <span class="absolute inset-0 animate-ping rounded-full" style="background: var(--accent-focus);"></span>
+          <span class="relative grid h-full w-full place-items-center rounded-full text-white" style="background: var(--accent);">
             <svg class="h-4 w-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
           </span>
         </div>
         <div>
-          <p class="font-semibold">Building your course</p>
-          <p id="gen-topic" class="text-xs text-slate-500"></p>
+          <p class="font-semibold text-stone-900">Building your course</p>
+          <p id="gen-topic" class="text-xs text-stone-500"></p>
         </div>
       </div>
       <ul id="gen-steps" class="mt-6 space-y-2.5 text-sm"></ul>
