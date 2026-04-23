@@ -15,6 +15,7 @@ from langchain_groq import ChatGroq
 from langsmith import traceable
 
 from models.schemas import RouteDecision
+from store.catalog import get as get_course
 from store.chroma_client import get_vector_store
 
 log = logging.getLogger(__name__)
@@ -25,21 +26,31 @@ SMALL_MODEL = os.environ.get("SMALL_MODEL", "llama-3.1-8b-instant")
 
 ROUTER_PROMPT = """Classify the user's latest message in a course chatbot.
 
-Return one of three routes:
+Return one of four routes:
 
+- greeting: a greeting or opener like "hi", "hello", "hey", "hey there", "good morning",
+  or a meta-question about the bot's capabilities with no prior turns ("what can you do?",
+  "who are you?"). This takes priority when the history is empty.
 - needs_retrieval: a factual question whose answer depends on the course's video transcripts
   (e.g., "what's the difference between an image and a container?", "how does useEffect clean up?").
 - followup: a short response, thanks, or a request to rephrase/simplify the previous assistant answer
-  (e.g., "thanks", "say that simpler", "what do you mean?", "yes").
+  (e.g., "thanks", "say that simpler", "what do you mean?"). ONLY use when prior history exists.
 - unclear: too vague to answer without clarification (e.g., "how?", "why?", "explain", "tell me more"
   with no prior context).
+
+Examples:
+- History empty, message "hi" → greeting
+- History empty, message "hello, what can you do?" → greeting
+- History empty, message "what is docker?" → needs_retrieval
+- History has prior turn, message "thanks" → followup
+- History empty, message "how?" → unclear
 
 Previous conversation (may be empty):
 {history}
 
 User message: {user_message}
 
-Return ONLY a JSON object: {{"route": "needs_retrieval" | "followup" | "unclear"}}. No prose."""
+Return ONLY a JSON object: {{"route": "greeting" | "needs_retrieval" | "followup" | "unclear"}}. No prose."""
 
 
 RAG_PROMPT = """You are a tutor for a course on {topic_hint}. Answer the user's question using ONLY the
@@ -66,6 +77,12 @@ User message: {user_message}"""
 CLARIFY_TEMPLATE = (
     "Could you say a bit more about what you're asking? "
     "For example, is there a specific concept, step, or video moment you'd like me to explain?"
+)
+
+GREETING_TEMPLATE = (
+    "Hi! I'm your tutor for this course. Ask me anything about the videos — "
+    "I'll pull the relevant moments and cite them for you. "
+    "Try: *What is the main concept?*, *Summarize video 2*, or *Quiz me on the basics*."
 )
 
 
@@ -106,12 +123,33 @@ def _build_context(chunks: list) -> tuple[str, list[str]]:
     return "\n\n".join(blocks), raw
 
 
+def _validate_citations(answer: str, num_videos: int) -> str:
+    """Replace out-of-range [Video N] references with [Video ?]; log a warning."""
+    import re
+
+    valid = set(range(1, num_videos + 1))
+
+    def _sub(m: re.Match) -> str:
+        n = int(m.group(1))
+        if n in valid:
+            return m.group(0)
+        log.warning("citation out of range: %s (valid: 1..%d)", m.group(0), num_videos)
+        return "[Video ?]"
+
+    return re.sub(r"\[Video (\d+)\]", _sub, answer)
+
+
 def retrieve_and_answer(state: dict) -> dict:
     """Pull top-k chunks and answer the question, grounded in transcripts."""
-    vs = get_vector_store(state["course_id"])
-    retriever = vs.as_retriever(search_kwargs={"k": 4})
+    course_id = state["course_id"]
+    vs = get_vector_store(course_id)
+    retriever = vs.as_retriever(search_kwargs={"k": 6})
     docs = retriever.invoke(state["user_message"])
     context, raw_chunks = _build_context(docs)
+
+    # Total videos in course — used to validate citations.
+    course = get_course(course_id)
+    num_videos = (course or {}).get("video_count", 0)
 
     topic_hint = ""  # not strictly needed for answer quality; chunks carry enough context
     prompt = ChatPromptTemplate.from_template(RAG_PROMPT)
@@ -122,7 +160,8 @@ def retrieve_and_answer(state: dict) -> dict:
         {"topic_hint": topic_hint, "context": context, "user_message": state["user_message"]}
     )
     answer = result.content if hasattr(result, "content") else str(result)
-    log.info("retrieve_and_answer: %d chunks -> %d chars", len(docs), len(answer))
+    answer = _validate_citations(answer, num_videos)
+    log.info("retrieve_and_answer: %d chunks -> %d chars (videos=%d)", len(docs), len(answer), num_videos)
 
     return {
         "retrieved_chunks": raw_chunks,
@@ -161,5 +200,17 @@ def clarify(state: dict) -> dict:
         "messages": [
             HumanMessage(content=state["user_message"]),
             AIMessage(content=CLARIFY_TEMPLATE),
+        ],
+    }
+
+
+def greet(state: dict) -> dict:
+    """Return a friendly greeting/orientation instead of retrieving."""
+    log.info("greet: returning greeting template")
+    return {
+        "answer": GREETING_TEMPLATE,
+        "messages": [
+            HumanMessage(content=state["user_message"]),
+            AIMessage(content=GREETING_TEMPLATE),
         ],
     }

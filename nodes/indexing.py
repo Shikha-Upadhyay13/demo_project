@@ -13,8 +13,8 @@ from store.chroma_client import collection_name_for, get_vector_store
 
 log = logging.getLogger(__name__)
 
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
+CHUNK_SIZE = 1200
+CHUNK_OVERLAP = 300
 
 
 def chunker_embedder(state: dict) -> dict:

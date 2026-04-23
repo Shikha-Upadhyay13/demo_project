@@ -53,11 +53,12 @@ class Summary(BaseModel):
 
 
 class RouteDecision(BaseModel):
-    route: Literal["needs_retrieval", "followup", "unclear"] = Field(
+    route: Literal["needs_retrieval", "followup", "unclear", "greeting"] = Field(
         description=(
             "Classification of the user message. "
             "needs_retrieval: a factual question about the course content. "
             "followup: a clarifying request about the previous answer, or chit-chat like 'thanks'. "
-            "unclear: too vague to answer without clarification."
+            "unclear: too vague to answer without clarification. "
+            "greeting: a greeting or opening like 'hi', 'hello', 'hey there'."
         )
     )

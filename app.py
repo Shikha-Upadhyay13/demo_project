@@ -28,6 +28,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from langchain_core.messages import AIMessageChunk
+
 from graphs.course_builder import compiled_course_builder_async
 from graphs.tutor_chatbot import compiled_tutor_chatbot_async
 from store import catalog
@@ -267,15 +269,23 @@ async def _chat_stream(course_id: str, message: str):
                     if node_name == "router" and not sent_route:
                         sent_route = True
                         yield _sse("route", {"route": partial.get("route", "unclear")})
-                    # Only clarify is synchronous (no LLM stream). Emit its answer as one token.
-                    if node_name == "clarify":
+                    # clarify + greet are synchronous (no LLM stream). Emit their answer as one token.
+                    if node_name in {"clarify", "greet"}:
                         final = partial.get("answer", "")
                         if final:
                             yield _sse("token", {"text": final})
             elif mode == "messages":
                 msg, meta = chunk
                 node = meta.get("langgraph_node")
-                if node in {"retrieve_and_answer", "direct_answer"} and getattr(msg, "content", ""):
+                # Only emit genuine streaming chunks (AIMessageChunk). Full
+                # AIMessage/HumanMessage appended to state at node return are
+                # also routed through this channel — skip them or the reply
+                # gets echoed twice.
+                if (
+                    node in {"retrieve_and_answer", "direct_answer"}
+                    and isinstance(msg, AIMessageChunk)
+                    and getattr(msg, "content", "")
+                ):
                     piece = msg.content
                     collected_answer_parts.append(piece)
                     yield _sse("token", {"text": piece})

@@ -72,6 +72,33 @@ def video_finder(state: dict) -> dict:
     return {"videos": videos}
 
 
+def _group_into_sentences(lines: list[str], target_words: int = 15) -> str:
+    """Group caption lines into pseudo-sentences so chunkers have real boundaries.
+
+    YouTube captions arrive as ~5-15-word fragments without punctuation. A naive
+    character-level splitter can't find sentence boundaries, so chunks cut
+    mid-concept. We merge adjacent lines into groups of roughly ``target_words``
+    and append a period — giving RecursiveCharacterTextSplitter real "." anchors
+    to split on.
+    """
+    groups: list[str] = []
+    buf: list[str] = []
+    words = 0
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        buf.append(line)
+        words += len(line.split())
+        if words >= target_words:
+            groups.append(" ".join(buf).rstrip(".!?") + ".")
+            buf, words = [], 0
+    if buf:
+        groups.append(" ".join(buf).rstrip(".!?") + ".")
+    # Newlines between groups — splitter sees them as paragraph breaks.
+    return "\n\n".join(groups)
+
+
 def _fetch_one(video_id: str) -> str | None:
     try:
         fetched = YouTubeTranscriptApi().fetch(video_id, languages=["en", "en-US", "en-GB"])
@@ -83,7 +110,7 @@ def _fetch_one(video_id: str) -> str | None:
         return None
 
     lines = [snippet.text for snippet in fetched]
-    text = "\n".join(line for line in lines if line.strip())
+    text = _group_into_sentences(lines)
     return text or None
 
 

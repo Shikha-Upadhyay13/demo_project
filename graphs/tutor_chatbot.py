@@ -13,13 +13,13 @@ from langgraph.graph import END, START, StateGraph
 
 from graphs.course_builder import _async_checkpointer, _checkpointer
 from models.schemas import TutorState
-from nodes.chat import clarify, direct_answer, retrieve_and_answer, router
+from nodes.chat import clarify, direct_answer, greet, retrieve_and_answer, router
 
 
 def _route_selector(state: dict) -> str:
     # Fallback to clarify on anything unexpected from the LLM classifier.
     route = state.get("route", "unclear")
-    return route if route in {"needs_retrieval", "followup", "unclear"} else "unclear"
+    return route if route in {"needs_retrieval", "followup", "unclear", "greeting"} else "unclear"
 
 
 def _build_graph() -> StateGraph:
@@ -29,6 +29,7 @@ def _build_graph() -> StateGraph:
     g.add_node("retrieve_and_answer", retrieve_and_answer)
     g.add_node("direct_answer", direct_answer)
     g.add_node("clarify", clarify)
+    g.add_node("greet", greet)
 
     g.add_edge(START, "router")
     g.add_conditional_edges(
@@ -38,11 +39,13 @@ def _build_graph() -> StateGraph:
             "needs_retrieval": "retrieve_and_answer",
             "followup": "direct_answer",
             "unclear": "clarify",
+            "greeting": "greet",
         },
     )
     g.add_edge("retrieve_and_answer", END)
     g.add_edge("direct_answer", END)
     g.add_edge("clarify", END)
+    g.add_edge("greet", END)
     return g
 
 
