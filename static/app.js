@@ -768,8 +768,12 @@ function cancelSpeech() {
 const CALL = {
   active: false,
   state: "idle",     // idle | listening | thinking | speaking
-  rec: null,
+  rec: null,         // single long-lived SpeechRecognition instance
+  recRunning: false, // mirrors whether rec.start() has been called and hasn't ended
   muted: false,
+  inTurn: false,     // true between "user paused" and "AI done speaking"
+  turnText: "",      // accumulating finalized transcript for the current user turn
+  silenceTimer: null,
 };
 
 function openCallMode() {
@@ -780,6 +784,8 @@ function openCallMode() {
   if (CALL.active) return;
   CALL.active = true;
   CALL.muted = false;
+  CALL.inTurn = false;
+  CALL.turnText = "";
   renderCallOverlay();
   cancelSpeech();
   // Small delay before starting mic so the overlay animation doesn't fight the permission prompt.
@@ -827,11 +833,13 @@ function toggleCallMute() {
   const btn = document.getElementById("call-mute");
   if (btn) btn.classList.toggle("is-muted", CALL.muted);
   if (CALL.muted) {
-    if (CALL.rec) { try { CALL.rec.abort(); } catch {} }
     setCallState("idle", "Muted");
-  } else {
-    // Unmute → resume listening if we're idle (not mid-reply).
-    if (CALL.state === "idle") startCallListening();
+    clearTimeout(CALL.silenceTimer);
+    CALL.turnText = "";
+    // Leave the recognizer running — muting just ignores its results.
+  } else if (!CALL.inTurn) {
+    setCallState("listening");
+    startCallListening();  // no-op if rec is already running
   }
 }
 
@@ -858,86 +866,131 @@ function setCallTranscript(you, ai) {
   t.innerHTML = parts.join("");
 }
 
+// Build (or reuse) the one long-lived SpeechRecognition instance for this call.
 function startCallListening() {
-  if (!CALL.active || CALL.muted) return;
+  if (!CALL.active) return;
 
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const rec = new SpeechRecognition();
-  rec.lang = "en-US";
-  rec.interimResults = true;
-  rec.continuous = false;
-  rec.maxAlternatives = 1;
+  if (!CALL.rec) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SpeechRecognition();
+    rec.lang = "en-US";
+    rec.interimResults = true;
+    rec.continuous = true;   // keep listening across silences — we detect turn-end via a silence timer
+    rec.maxAlternatives = 1;
 
-  let finalText = "";
+    rec.addEventListener("result", (e) => {
+      if (!CALL.active || CALL.muted || CALL.inTurn) return;
+      let finalDelta = "";
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) finalDelta += r[0].transcript;
+        else interim += r[0].transcript;
+      }
+      if (finalDelta) CALL.turnText += finalDelta;
+      const shown = (CALL.turnText + interim).trim();
+      setCallTranscript(shown, "");
+      if (CALL.state !== "listening") setCallState("listening");
 
-  rec.addEventListener("result", (e) => {
-    let interim = "";
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const r = e.results[i];
-      if (r.isFinal) finalText += r[0].transcript;
-      else interim += r[0].transcript;
-    }
-    setCallTranscript((finalText + interim).trim(), "");
-  });
+      // Any new result resets the silence timer. Turn ends 1.2s after last utterance.
+      clearTimeout(CALL.silenceTimer);
+      if (shown.length >= 2) {
+        CALL.silenceTimer = setTimeout(() => {
+          if (!CALL.active || CALL.muted || CALL.inTurn) return;
+          const text = CALL.turnText.trim();
+          if (text.length < 2) return;
+          CALL.turnText = "";
+          CALL.inTurn = true;
+          handleCallTurn(text);
+        }, 1200);
+      }
+    });
 
-  rec.addEventListener("end", () => {
-    if (!CALL.active) return;
-    const text = finalText.trim();
-    if (!text) {
-      // Silence — loop back to listening after a brief pause.
-      if (!CALL.muted) setTimeout(startCallListening, 200);
-      return;
-    }
-    handleCallTurn(text);
-  });
+    rec.addEventListener("end", () => {
+      CALL.recRunning = false;
+      // Chrome's SpeechRecognition stops on its own after ~1 minute on Windows
+      // even with continuous=true. If the call is still active and we're not
+      // mid-turn, just start a fresh session. A brief delay avoids an
+      // "InvalidStateError" when the engine is still tearing down.
+      if (CALL.active && !CALL.muted && !CALL.inTurn) {
+        setTimeout(() => { if (CALL.active && !CALL.recRunning) startCallListening(); }, 200);
+      }
+    });
 
-  rec.addEventListener("error", (e) => {
-    if (!CALL.active) return;
-    if (e.error === "no-speech" || e.error === "aborted") {
-      if (!CALL.muted) setTimeout(startCallListening, 200);
-      return;
-    }
-    setCallState("idle", "Mic error: " + e.error);
-    setTimeout(closeCallMode, 1500);
-  });
+    rec.addEventListener("error", (e) => {
+      // Only hard errors close the call. Everything else (no-speech, aborted,
+      // network blips) is transient — log and let `end` trigger a restart.
+      console.warn("call STT error:", e.error);
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        setCallState("idle", "Microphone blocked — grant access to continue.");
+        setTimeout(() => { if (CALL.active) closeCallMode(); }, 2500);
+      } else if (e.error === "audio-capture") {
+        setCallState("idle", "No microphone found.");
+        setTimeout(() => { if (CALL.active) closeCallMode(); }, 2500);
+      }
+      // no-speech / aborted / network → do nothing; `end` will auto-restart.
+    });
 
-  try {
-    rec.start();
     CALL.rec = rec;
-    setCallState("listening");
+  }
+
+  if (CALL.recRunning) return;  // already listening
+  try {
+    CALL.rec.start();
+    CALL.recRunning = true;
+    if (!CALL.muted && !CALL.inTurn) setCallState("listening");
   } catch (err) {
-    console.warn("call: rec.start failed", err);
+    // InvalidStateError if the engine is still tearing down; try again soon.
+    if (err && err.name === "InvalidStateError") {
+      setTimeout(() => { if (CALL.active && !CALL.recRunning) startCallListening(); }, 300);
+    } else {
+      console.warn("call: rec.start failed", err);
+    }
   }
 }
 
 async function handleCallTurn(userText) {
+  clearTimeout(CALL.silenceTimer);
   setCallState("thinking");
   setCallTranscript(userText, "…");
 
-  const reply = await submitChatMessage(userText, {
-    onToken: (soFar) => {
-      // Update the call transcript as tokens stream so the user sees progress.
-      if (CALL.state === "thinking") setCallState("thinking", "Thinking...");
-      setCallTranscript(userText, soFar);
-    },
-  });
+  let reply = "";
+  try {
+    reply = await submitChatMessage(userText, {
+      onToken: (soFar) => {
+        if (CALL.state === "thinking") setCallState("thinking", "Thinking...");
+        setCallTranscript(userText, soFar);
+      },
+    });
+  } catch (err) {
+    console.warn("call turn failed:", err);
+  }
 
   if (!CALL.active) return;
 
   if (!reply) {
-    setCallState("idle", "No reply. Try again.");
-    setTimeout(() => { if (CALL.active) startCallListening(); }, 800);
+    setCallState("idle", "No reply. Ready for your next question.");
+    CALL.inTurn = false;
     return;
   }
 
   setCallState("speaking");
   setCallTranscript(userText, reply);
-
-  speakAndLoop(reply);
+  speakThenListen(reply);
 }
 
-function speakAndLoop(text) {
-  if (!hasTTS()) { if (CALL.active) startCallListening(); return; }
+function speakThenListen(text) {
+  const finish = () => {
+    CALL.inTurn = false;
+    CALL.turnText = "";
+    if (!CALL.active) return;
+    setCallState("listening");
+    // If the recognizer was auto-stopped while AI was speaking, resurrect it.
+    if (!CALL.recRunning) startCallListening();
+  };
+
+  if (!hasTTS()) { finish(); return; }
+
   const spoken = text
     .replace(/\[Video (\d+)\]/g, "Video $1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
@@ -949,16 +1002,12 @@ function speakAndLoop(text) {
   window.speechSynthesis.cancel();
 
   const sentences = spoken.split(/(?<=[.!?])\s+/).filter(Boolean);
-  if (!sentences.length) { if (CALL.active) startCallListening(); return; }
+  if (!sentences.length) { finish(); return; }
 
   let idx = 0;
   const speakNext = () => {
     if (!CALL.active) return;
-    if (idx >= sentences.length) {
-      setCallState("idle", "Your turn");
-      setTimeout(() => { if (CALL.active && !CALL.muted) startCallListening(); }, 300);
-      return;
-    }
+    if (idx >= sentences.length) { finish(); return; }
     const u = new SpeechSynthesisUtterance(sentences[idx++]);
     u.rate = 1.02;
     u.pitch = 1;
@@ -971,7 +1020,14 @@ function speakAndLoop(text) {
 
 function closeCallMode() {
   CALL.active = false;
-  if (CALL.rec) { try { CALL.rec.abort(); } catch {} CALL.rec = null; }
+  CALL.inTurn = false;
+  clearTimeout(CALL.silenceTimer);
+  if (CALL.rec) {
+    try { CALL.rec.stop(); } catch {}
+    try { CALL.rec.abort(); } catch {}
+    CALL.rec = null;
+    CALL.recRunning = false;
+  }
   cancelSpeech();
   document.removeEventListener("keydown", callKeyHandler);
   const ov = document.getElementById("call-overlay");
